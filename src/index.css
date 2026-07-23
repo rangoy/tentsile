@@ -43,6 +43,18 @@ header h1 {
   max-width: 60ch;
 }
 
+.disclaimer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.disclaimer a {
+  color: inherit;
+}
+
 main {
   display: grid;
   grid-template-columns: 1fr;

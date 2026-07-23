@@ -69,6 +69,10 @@ export default function App() {
           {selected && selectedDiameters && <ResultsPanel fit={selected.fit} labels={selected.labels} />}
         </div>
       </main>
+      <footer className="disclaimer">
+        For use with tents from <a href="https://www.tentsile.com/" target="_blank" rel="noopener noreferrer">tentsile.com</a>.
+        Not affiliated with or endorsed by Tentsile.
+      </footer>
     </div>
   )
 }

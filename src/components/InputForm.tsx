@@ -1,6 +1,7 @@
 import type { Settings, TreeEntry } from '../types'
 import { STINGRAY_SIDE } from '../constants'
 import { MAX_TREES, MIN_TREES } from '../geometry'
+import { NumberInput } from './NumberInput'
 
 interface Props {
   trees: TreeEntry[]
@@ -82,12 +83,11 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
                   {index === 0 ? (
                     <span className="cell-dash">—</span>
                   ) : (
-                    <input
-                      type="number"
+                    <NumberInput
                       min={0}
                       step={0.1}
                       value={tree.distToFirst}
-                      onChange={(e) => updateTree(index, { distToFirst: Number(e.target.value) || 0 })}
+                      onChange={(n) => updateTree(index, { distToFirst: n })}
                     />
                   )}
                 </td>
@@ -95,12 +95,11 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
                   {index <= 1 ? (
                     <span className="cell-dash">—</span>
                   ) : (
-                    <input
-                      type="number"
+                    <NumberInput
                       min={0}
                       step={0.1}
                       value={tree.distToSecond}
-                      onChange={(e) => updateTree(index, { distToSecond: Number(e.target.value) || 0 })}
+                      onChange={(n) => updateTree(index, { distToSecond: n })}
                     />
                   )}
                 </td>
@@ -170,42 +169,30 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
           </label>
           <label>
             Tent side length (m)
-            <input
-              type="number"
+            <NumberInput
               min={0.1}
               step={0.1}
               disabled={settings.tentModel === 'stingray'}
               value={settings.tentSide}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                onSettingsChange({ ...settings, tentSide: Number.isFinite(n) ? n : settings.tentSide })
-              }}
+              onChange={(n) => onSettingsChange({ ...settings, tentSide: n })}
             />
           </label>
           <label>
             Max ratchet strap length (m)
-            <input
-              type="number"
+            <NumberInput
               min={0.1}
               step={0.1}
               value={settings.strapMax}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                onSettingsChange({ ...settings, strapMax: Number.isFinite(n) ? n : settings.strapMax })
-              }}
+              onChange={(n) => onSettingsChange({ ...settings, strapMax: n })}
             />
           </label>
           <label>
             Tail/tether length (m)
-            <input
-              type="number"
+            <NumberInput
               min={0}
               step={0.05}
               value={settings.tailLength}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                onSettingsChange({ ...settings, tailLength: Number.isFinite(n) ? n : settings.tailLength })
-              }}
+              onChange={(n) => onSettingsChange({ ...settings, tailLength: n })}
             />
           </label>
         </div>

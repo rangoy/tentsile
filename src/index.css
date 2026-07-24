@@ -509,6 +509,42 @@ main {
   border-color: var(--accent);
 }
 
+.small-button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.small-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.small-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.level-check-table td {
+  padding: 0.25rem 0.75rem 0.25rem 0;
+}
+
+.level-check-table input[type='number'] {
+  font: inherit;
+  width: 4rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
 .viz-reset-button {
   width: auto !important;
   padding: 0 0.5rem;

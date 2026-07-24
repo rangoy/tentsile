@@ -2,6 +2,9 @@ import type {
   CheckResult,
   ComboResult,
   FitResult,
+  LevelAdjustment,
+  LevelAdjustments,
+  LevelAngles,
   OtherTreePoint,
   Point,
   Settings,
@@ -9,6 +12,7 @@ import type {
   TreeInputs,
   TreeLabels,
   TriangleSolution,
+  VertexId,
 } from './types'
 
 export const ANGLE_OK_MAX = 80
@@ -1067,4 +1071,45 @@ export function checkGroveObstructions(
     detail: `Closest other tree (${worstDisplay}) has ${worstClearance.toFixed(2)} m clearance from the tent footprint.`,
     margin,
   }
+}
+
+const CORNER_IDS: VertexId[] = ['A', 'B', 'C']
+
+/**
+ * Turns per-corner strap tilt readings into a suggested tie-off height
+ * correction to level the platform. The tent corners are already fixed by
+ * the fit's geometry (their horizontal reach to each tree is known), so a
+ * measured tilt angle converts straight to the vertical drop below wherever
+ * that strap is currently tied off: `drop = reach * tan(angle)`. Assuming
+ * all three were tied off at roughly the same height to begin with (the
+ * usual approach — eyeball a consistent height on each tree before
+ * tensioning), unequal drops reveal exactly how far off that eyeballing
+ * was: raise or lower each tie-off point by (target − its drop) to bring
+ * all three corners level. Needs at least two measured corners to say
+ * anything.
+ */
+export function computeLevelAdjustments(fit: FitResult, angles: LevelAngles): LevelAdjustments {
+  const reach: Record<VertexId, number> = { A: fit.strapA, B: fit.strapB, C: fit.strapC }
+  const drop: Record<VertexId, number | null> = {
+    A: angles.A === null ? null : reach.A * Math.tan(angles.A / DEG),
+    B: angles.B === null ? null : reach.B * Math.tan(angles.B / DEG),
+    C: angles.C === null ? null : reach.C * Math.tan(angles.C / DEG),
+  }
+
+  const knownDrops = CORNER_IDS.map((id) => drop[id]).filter((d): d is number => d !== null)
+  if (knownDrops.length < 2) {
+    return {
+      A: { dropM: drop.A, mountAdjustM: null },
+      B: { dropM: drop.B, mountAdjustM: null },
+      C: { dropM: drop.C, mountAdjustM: null },
+    }
+  }
+
+  const target = knownDrops.reduce((sum, d) => sum + d, 0) / knownDrops.length
+  const result = {} as Record<VertexId, LevelAdjustment>
+  for (const id of CORNER_IDS) {
+    const d = drop[id]
+    result[id] = { dropM: d, mountAdjustM: d === null ? null : target - d }
+  }
+  return result as LevelAdjustments
 }

@@ -1,4 +1,5 @@
 import type { CheckResult, FitResult, TreeLabels } from '../types'
+import { LevelCheck } from './LevelCheck'
 
 interface Props {
   fit: FitResult
@@ -57,6 +58,8 @@ export function ResultsPanel({ fit, labels, tailLength }: Props) {
               </tr>
             </tbody>
           </table>
+
+          <LevelCheck fit={fit} labels={labels} />
 
           <details className="checks-details" open={fit.overallVerdict !== 'pass'}>
             <summary>Checks{issueSummary(fit)}</summary>

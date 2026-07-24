@@ -110,6 +110,26 @@ export interface TriangleSolution {
   angleC: number
 }
 
+/** Measured strap tilt per corner, in degrees (positive = descending from tree to corner); null = not yet measured */
+export interface LevelAngles {
+  A: number | null
+  B: number | null
+  C: number | null
+}
+
+export interface LevelAdjustment {
+  /** implied drop below the tree attachment point, in meters; null if this corner's angle is unmeasured */
+  dropM: number | null
+  /** meters to raise (positive) or lower (negative) this tree's tie-off point to level the platform; null if not computable */
+  mountAdjustM: number | null
+}
+
+export interface LevelAdjustments {
+  A: LevelAdjustment
+  B: LevelAdjustment
+  C: LevelAdjustment
+}
+
 export interface FitResult {
   triangle: TriangleSolution
   center: Point

@@ -375,6 +375,39 @@ A few non-obvious fixes were needed to get this right:
   zoom — the point of zooming in is to give the *geometry* more room, not to
   blow up text until it collides with itself.
 
+## 6b. Level check (v7)
+
+Once a combination is selected, an optional "Level check" section (below the
+strap lengths, in the Result card) helps with the *last* part of pitching:
+correcting for an eyeballed tie-off height once all three straps are attached.
+In practice all three straps get tied off at roughly the same height on their
+trees by eye — this tool measures how far off that guess actually was and
+turns it into a precise per-tree correction, rather than the (imprecise, and
+usually smaller-range) ratchet adjustment.
+
+- For each corner, the user measures the strap's tilt — how far it declines
+  from horizontal between the tree and the tent corner — either by tapping
+  "Measure" (reads the phone's tilt via `DeviceOrientationEvent`, holding the
+  phone flat against the strap webbing, screen up, top edge toward the tree)
+  or by typing the angle in directly.
+- The horizontal reach per corner is already known from the fit (`strapA/B/C`
+  — the flat 2D plan-view distance), so each measured angle converts to an
+  implied vertical drop below that tree's current tie-off point: `drop =
+  reach * tan(angle)`.
+- Since the tent corners are fixed by the geometry, a level platform means
+  equal drop at all three corners; unequal drops are exactly the tie-off
+  height error. The tool reports, per corner, how many centimeters to raise
+  or lower its tie-off point (`target average drop − this corner's drop`) —
+  needs at least two corners measured to compute a target.
+- iOS gates `DeviceOrientationEvent` behind an explicit permission prompt that
+  must be triggered by a user gesture — the "Measure" tap itself requests it
+  on first use (`useDeviceTilt` hook). Android/desktop browsers generally
+  expose it without a prompt. Manual angle entry always works as a fallback,
+  including on devices/browsers without the sensor at all.
+- This doesn't add height/3D to the core geometry model (§8 still applies to
+  the fit computation itself) — it's a self-contained field-assist tool
+  layered on top of the existing flat-plan strap-reach numbers.
+
 ## 7. Tech stack (final)
 
 - Single-page app, client-side only (no backend needed — pure geometry/math).
@@ -422,5 +455,6 @@ All open questions from the draft have been resolved:
 | Zoom/pan (v4) | Custom `useZoomPan` hook (not d3-zoom), full touch support via Pointer Events, constant-size labels via counter-scaling |
 | Overshoot correction (v5) | Blend center from Fermat point toward centroid, using up to the 7° bend tolerance, until no corner overshoots past its tree; new per-corner "Tent fit" check reports clearance or fails honestly if even the centroid can't clear within tolerance |
 | Reference pair selection (v6) | Two dropdowns pick any tree pair as references, decoupled from list order (rejected: reordering the list — would silently renumber every tree); changing the pair auto-recomputes every other tree's distances/flip-side from the previously-known geometry rather than asking for re-measurement, declining with an explanatory message if the old geometry can't support it |
+| Level check (v7) | Assume equal strap starting height on all three trees (matches recommended pitching technique) rather than asking the user to also enter each tree's attachment height — keeps the tool to a single tilt reading per corner instead of doubling the inputs; adjustment is expressed as centimeters to move the tie-off point on the trunk (correcting the eyeballed height directly), not as a ratchet strap-length change |
 
 Spec is considered final for the current implementation.

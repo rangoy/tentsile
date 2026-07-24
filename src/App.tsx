@@ -102,7 +102,12 @@ export default function App() {
       </main>
       <footer className="disclaimer">
         For use with tents from <a href="https://www.tentsile.com/" target="_blank" rel="noopener noreferrer">tentsile.com</a>.
-        Not affiliated with or endorsed by Tentsile. Built with AI assistance from Claude.
+        Not affiliated with or endorsed by Tentsile. Built with AI assistance from Claude. Found an
+        issue? Report it on{' '}
+        <a href="https://github.com/rangoy/tentsile/issues" target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+        .
       </footer>
     </div>
   )

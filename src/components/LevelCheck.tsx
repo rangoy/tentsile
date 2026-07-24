@@ -53,6 +53,11 @@ export function LevelCheck({ fit, labels }: Props) {
         that guess was — the adjustment is how many centimeters to raise or lower each tie-off
         point so the platform ends up level.
       </p>
+      <p className="hint">
+        <strong>Unverified in the field</strong> — this is calculated from the geometry on paper
+        and hasn't been checked against a real pitch. Treat the numbers as a starting point, not
+        a guarantee.
+      </p>
       {!supported && (
         <p className="hint">Tilt sensor not available on this device/browser — enter angles manually.</p>
       )}

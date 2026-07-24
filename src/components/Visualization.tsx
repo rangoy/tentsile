@@ -212,7 +212,7 @@ export function Visualization({
             : tailLength > 0
               ? `${strapLength.toFixed(2)} m (${ratchetLength.toFixed(2)} m)`
               : `${strapLength.toFixed(2)} m`
-          const labelWidth = 22 + label.length * 4.6
+          const labelWidth = 24 + label.length * 5.4
 
           return (
             <g key={`strap-${tree.id}`}>
@@ -229,8 +229,8 @@ export function Visualization({
                 strokeDasharray="2 4"
               />
               <ScreenSpace at={mid} zoomScale={scale}>
-                <rect x={-labelWidth / 2} y={-9} width={labelWidth} height={16} fill="white" opacity={0.85} rx={3} />
-                <text x={0} y={3} textAnchor="middle" fontSize={11} fill="#333">
+                <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="white" opacity={0.85} rx={3} />
+                <text x={0} y={4} textAnchor="middle" fontSize={13} fill="#333">
                   {label}
                 </text>
               </ScreenSpace>
@@ -261,7 +261,7 @@ export function Visualization({
           const p = project(tree.pos)
           return (
             <ScreenSpace at={p} zoomScale={scale} key={`tree-label-${tree.id}`}>
-              <text x={0} y={-16} textAnchor="middle" fontSize={13} fontWeight={600}>
+              <text x={0} y={-16} textAnchor="middle" fontSize={15} fontWeight={600}>
                 {labels[tree.id]}
               </text>
             </ScreenSpace>
@@ -288,7 +288,7 @@ export function Visualization({
                   x={0}
                   y={-14}
                   textAnchor="middle"
-                  fontSize={12}
+                  fontSize={13}
                   fontWeight={colliding ? 700 : 400}
                   fill={colliding ? '#c0392b' : '#6b6b63'}
                 >
@@ -316,7 +316,7 @@ export function Visualization({
                 x={lx}
                 y={ly}
                 textAnchor="middle"
-                fontSize={11}
+                fontSize={13}
                 fill={STATUS_COLOR[checkStatus[angle.id] ?? 'pass']}
                 fontWeight={600}
               >

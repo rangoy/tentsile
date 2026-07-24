@@ -54,23 +54,31 @@ export interface TreeLabels {
 
 /**
  * One tree in a grove of up to MAX_TREES candidates. Trees are entered via
- * baseline + trilateration rather than a full pairwise distance matrix:
- * tree 0 is the origin, tree 1 sets the baseline distance, and every tree
- * from index 2 onward gives its distance to tree 0 and tree 1 plus which
- * side of the tree0-tree1 line it's on (this last part only matters for
- * inferring the distance between two index->=2 trees, since their own
- * distances to trees 0 and 1 are given directly).
+ * baseline + trilateration rather than a full pairwise distance matrix: two
+ * trees are designated as references (see TreeReferences — by default the
+ * first two, but any pair can be chosen, e.g. when the default pair happens
+ * to be awkward to measure between), and every other tree gives its distance
+ * to both reference trees plus which side of the reference-pair line it's on
+ * (this last part only matters for inferring the distance between two
+ * non-reference trees, since their own distances to the references are given
+ * directly).
  */
 export interface TreeEntry {
   /** optional free-text label, empty by default — the tree's identity is its 1-based position */
   label: string
   diameter: number | null
-  /** meters to tree 0 (unused for tree 0 itself) */
+  /** meters to reference A (unused for a tree currently acting as reference A) */
   distToFirst: number
-  /** meters to tree 1 (unused for trees 0 and 1) */
+  /** meters to reference B (unused for a tree currently acting as either reference) */
   distToSecond: number
-  /** true = mirrored to the other side of the tree0-tree1 baseline */
+  /** true = mirrored to the other side of the reference-pair line */
   flipSide: boolean
+}
+
+/** Which two grove trees (by index) anchor the coordinate system the rest are measured against. */
+export interface TreeReferences {
+  a: number
+  b: number
 }
 
 /** A grove tree not part of the currently selected combo, positioned in that combo's local frame purely for display. */

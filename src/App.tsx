@@ -3,19 +3,25 @@ import { comboKey } from './components/ComboTabs'
 import { InputForm } from './components/InputForm'
 import { ResultsPanel } from './components/ResultsPanel'
 import { Visualization } from './components/Visualization'
-import { DEFAULT_SETTINGS, DEFAULT_TREES, isValidSettings } from './constants'
-import { projectOtherTrees, rankCombinations } from './geometry'
+import { DEFAULT_REFERENCES, DEFAULT_SETTINGS, DEFAULT_TREES, isValidReferences, isValidSettings } from './constants'
+import { projectOtherTrees, rankCombinations, recomputeTreesForReferences } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
-import type { Settings, TreeEntry } from './types'
+import type { Settings, TreeEntry, TreeReferences } from './types'
 
 export default function App() {
   const [trees, setTrees] = useLocalStorage<TreeEntry[]>('tentsile.trees', DEFAULT_TREES)
   const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
+  const [references, setReferences] = useLocalStorage<TreeReferences>(
+    'tentsile.references',
+    DEFAULT_REFERENCES,
+    isValidReferences,
+  )
+  const [referenceError, setReferenceError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
 
   const { combos, positionErrors, positions } = useMemo(
-    () => rankCombinations(trees, settings, 5),
-    [trees, settings],
+    () => rankCombinations(trees, settings, 5, references.a, references.b),
+    [trees, settings, references],
   )
 
   const selected = combos.find((c) => comboKey(c) === selectedKey) ?? combos[0]
@@ -32,6 +38,24 @@ export default function App() {
         C: trees[selected.indices[2]]?.diameter ?? null,
       }
     : null
+
+  const handleRemoveTree = (index: number) => {
+    setTrees(trees.filter((_, i) => i !== index))
+    const shift = (refIndex: number) => (refIndex > index ? refIndex - 1 : refIndex)
+    setReferences({ a: shift(references.a), b: shift(references.b) })
+  }
+
+  const handleReferenceChange = (which: 'a' | 'b', newIndex: number) => {
+    const next = which === 'a' ? { a: newIndex, b: references.b } : { a: references.a, b: newIndex }
+    const result = recomputeTreesForReferences(trees, references.a, references.b, next.a, next.b)
+    if (result.error) {
+      setReferenceError(result.error)
+      return
+    }
+    setReferenceError(null)
+    setTrees(result.trees)
+    setReferences(next)
+  }
 
   return (
     <div className="app">
@@ -61,6 +85,10 @@ export default function App() {
           <InputForm
             trees={trees}
             onTreesChange={setTrees}
+            onRemoveTree={handleRemoveTree}
+            references={references}
+            onReferenceChange={handleReferenceChange}
+            referenceError={referenceError}
             settings={settings}
             onSettingsChange={setSettings}
             positionErrors={positionErrors}

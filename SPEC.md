@@ -181,16 +181,42 @@ Real groves often have more than 3 usable trees. Rather than force the user to
 measure every pairwise distance (O(N²), tedious for larger groves), trees are
 entered via **baseline + trilateration**:
 
-- Tree 1 and Tree 2 form a baseline — just their distance apart.
-- Every tree after that gives its distance to Tree 1 *and* Tree 2 (2 measurements,
-  not 1 per additional tree), which is enough to place it via the same law-of-cosines
+- Two trees are designated as **references** — just the distance between them.
+  By default these are the first two added, but any pair can be picked (see
+  "Choosing the reference pair" below) — useful when the default pair happens to
+  be awkward to measure between (obstructed sightline, awkward terrain, etc.).
+- Every other tree gives its distance to *both* references (2 measurements, not 1
+  per additional tree), which is enough to place it via the same law-of-cosines
   circle intersection already used for the 3-tree case.
 
 This is O(N) measurements instead of O(N²), at the cost of one ambiguity: a tree's
-distance to Tree 1 and Tree 2 alone doesn't say which side of the Tree1–Tree2 line
-it's on. That only matters for inferring the distance *between two* such extra
-trees (their own distances to Tree 1/Tree 2 are exact regardless) — so each extra
-tree has a "flip to the other side" checkbox to resolve it if needed.
+distance to the two references alone doesn't say which side of the reference-pair
+line it's on. That only matters for inferring the distance *between two* such
+extra trees (their own distances to the references are exact regardless) — so
+each extra tree has a "flip to the other side" checkbox to resolve it if needed.
+
+**Choosing the reference pair**: two dropdowns ("Reference A" / "Reference B", each
+excluding whichever tree the other has selected, so picking the same tree for both
+is impossible by construction rather than needing an error message for it) let the
+user designate any two trees as the anchor pair, independent of their position in
+the list — no reordering, so tree numbers stay stable. Changing the pair doesn't
+just relabel two dropdowns: every tree's `distToFirst`/`distToSecond`/`flipSide`
+fields are defined *relative to whichever trees are currently references*, so the
+meaning of every other tree's fields shifts too (including the old references,
+which now need distances of their own). Asking the user to re-measure everything
+after a simple preference change would defeat the point, so `recomputeTreesForReferences()`
+derives the new values automatically: it builds every tree's position under the
+*old* reference pair (fully determined already, assuming that data was valid),
+finds the rigid transform mapping the *new* pair onto the origin/+x-axis, and
+re-derives each tree's distances and flip-side in that new frame — exact up to
+floating point, since a rigid transform preserves all pairwise distances. If the
+old geometry doesn't have valid positions for both new references (missing or
+invalid prior measurements), there's no frame to derive from, and the switch is
+declined with an explanatory message rather than silently producing wrong numbers.
+Removing a tree that's currently a reference is blocked in the UI (the recompute
+model doesn't need to handle that case); removing any other tree still shifts the
+stored reference indices down by one wherever they'd otherwise now point at the
+wrong (shifted) tree.
 
 **Finding the best combination**: every 3-tree combination (up to `C(8,3) = 56` for
 the 8-tree cap) is run through the same `computeFit` used for the original 3-tree
@@ -275,18 +301,19 @@ replacing the single shared `tentSide` constant used previously.
 
 ## 4. Inputs (final)
 
-- A grove of 3–8 trees (add/remove trees in the UI). Tree 1–2 set a baseline
-  distance; each tree after that gives distances to Tree 1 and Tree 2, plus a
-  "flip side" toggle (see §3b). Each tree also has an optional free-text label
-  (empty by default — see §3b "Tree identity").
+- A grove of 3–8 trees (add/remove trees in the UI). Two trees are designated as
+  references (default: the first two added, but any pair can be picked — see
+  §3b "Choosing the reference pair"); each other tree gives distances to both
+  references, plus a "flip side" toggle (see §3b). Each tree also has an optional
+  free-text label (empty by default — see §3b "Tree identity").
 - Tent side length: preset **Stingray = 4.1 m**, with an editable custom value.
 - Ratchet strap max length (default 6 m, editable).
 - Tail/tether length (default 0.5 m, editable).
 - Optional per-tree trunk diameter (defaults to 40 cm if left blank), used for the
   ≥30 cm minimum check and the wrap-allowance subtracted from max distance / strap
   length.
-- All settings (trees, tent side length, strap length, tail length) persisted to
-  `localStorage` so they survive a reload.
+- All settings (trees, reference pair, tent side length, strap length, tail
+  length) persisted to `localStorage` so they survive a reload.
 - Units: **metric only** (meters/centimeters), no imperial toggle.
 - No height/elevation inputs in v1 — flat 2D ground-plane model only.
 
@@ -394,5 +421,6 @@ All open questions from the draft have been resolved:
 | Basket loop (v3) | `ratchet < 0` flags `tight` (not fail) with a link to Tentsile's basket-loop guide; the flat 5 m minimum edge distance was removed since this per-corner check covers it more precisely |
 | Zoom/pan (v4) | Custom `useZoomPan` hook (not d3-zoom), full touch support via Pointer Events, constant-size labels via counter-scaling |
 | Overshoot correction (v5) | Blend center from Fermat point toward centroid, using up to the 7° bend tolerance, until no corner overshoots past its tree; new per-corner "Tent fit" check reports clearance or fails honestly if even the centroid can't clear within tolerance |
+| Reference pair selection (v6) | Two dropdowns pick any tree pair as references, decoupled from list order (rejected: reordering the list — would silently renumber every tree); changing the pair auto-recomputes every other tree's distances/flip-side from the previously-known geometry rather than asking for re-measurement, declining with an explanatory message if the old geometry can't support it |
 
 Spec is considered final for the current implementation.

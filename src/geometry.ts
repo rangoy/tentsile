@@ -722,57 +722,139 @@ export function computeFit(
 
 /**
  * Reconstructs 2D positions for a grove of trees entered via baseline +
- * trilateration: tree 0 is the origin, tree 1 sets the baseline along +x,
- * and each tree from index 2 onward gives its distance to trees 0 and 1 plus
- * which side of that baseline it's on. A tree with invalid/missing distances
- * gets a null position and an entry in `errors`; every combination that
- * references it is skipped rather than guessed at.
+ * trilateration: reference tree `refA` is the origin, reference tree `refB`
+ * sets the baseline along +x, and every other tree gives its distance to
+ * both references plus which side of that baseline it's on. A tree with
+ * invalid/missing distances gets a null position and an entry in `errors`;
+ * every combination that references it is skipped rather than guessed at.
  */
-export function buildTreePositions(trees: TreeEntry[]): {
+export function buildTreePositions(
+  trees: TreeEntry[],
+  refA = 0,
+  refB = 1,
+): {
   positions: Array<Point | null>
   errors: string[]
 } {
-  const positions: Array<Point | null> = []
+  const positions: Array<Point | null> = new Array(trees.length).fill(null)
   const errors: string[] = []
 
   if (trees.length === 0) return { positions, errors }
-  positions.push({ x: 0, y: 0 })
-  if (trees.length === 1) return { positions, errors }
-
-  const baseline = trees[1].distToFirst
-  if (!(baseline > 0)) {
-    errors.push(`${formatTreeDisplay(2, trees[1].label)}: distance must be greater than zero.`)
-    positions.push(null)
-  } else {
-    positions.push({ x: baseline, y: 0 })
+  if (refA === refB || !trees[refA] || !trees[refB]) {
+    errors.push('Pick two different trees as references.')
+    return { positions, errors }
   }
 
-  for (let i = 2; i < trees.length; i++) {
+  positions[refA] = { x: 0, y: 0 }
+
+  const baseline = trees[refB].distToFirst
+  if (!(baseline > 0)) {
+    errors.push(`${formatTreeDisplay(refB + 1, trees[refB].label)}: distance must be greater than zero.`)
+  } else {
+    positions[refB] = { x: baseline, y: 0 }
+  }
+
+  for (let i = 0; i < trees.length; i++) {
+    if (i === refA || i === refB) continue
     const tree = trees[i]
-    const base = positions[1]
+    const base = positions[refB]
     const d0 = tree.distToFirst
     const d1 = tree.distToSecond
     const display = formatTreeDisplay(i + 1, tree.label)
     if (base === null || !(d0 > 0) || !(d1 > 0)) {
       errors.push(`${display}: distances must be greater than zero.`)
-      positions.push(null)
       continue
     }
     const b = base.x
     if (b + d0 <= d1 || b + d1 <= d0 || d0 + d1 <= b) {
-      const baselineLabel = `${formatTreeDisplay(1, trees[0].label)}-${formatTreeDisplay(2, trees[1].label)}`
+      const baselineLabel = `${formatTreeDisplay(refA + 1, trees[refA].label)}-${formatTreeDisplay(refB + 1, trees[refB].label)}`
       errors.push(
         `${display}: ${d0.toFixed(1)} m and ${d1.toFixed(1)} m don't form a valid triangle with the ${baselineLabel} baseline (${b.toFixed(1)} m).`,
       )
-      positions.push(null)
       continue
     }
     const angleAt0 = Math.acos((b ** 2 + d0 ** 2 - d1 ** 2) / (2 * b * d0))
     const side = tree.flipSide ? -1 : 1
-    positions.push({ x: d0 * Math.cos(angleAt0), y: side * d0 * Math.sin(angleAt0) })
+    positions[i] = { x: d0 * Math.cos(angleAt0), y: side * d0 * Math.sin(angleAt0) }
   }
 
   return { positions, errors }
+}
+
+/**
+ * When the user picks a different pair of reference trees, every tree's
+ * distToFirst/distToSecond/flipSide need to mean "relative to the NEW pair"
+ * instead of the old one — even for trees whose own numbers don't change,
+ * since those two fields are always interpreted relative to whichever trees
+ * are currently the references. Rather than asking for new measurements,
+ * this recomputes every tree's fields from the fully-known old geometry:
+ * build positions under the OLD reference pair, find the rigid transform
+ * that maps the NEW reference pair onto the origin/+x-axis, and re-derive
+ * every tree's distances in that new frame. Returns an error instead of a
+ * result if the old geometry doesn't have valid positions for both new
+ * references — with neither position known, there's no frame to derive from.
+ */
+export function recomputeTreesForReferences(
+  trees: TreeEntry[],
+  oldRefA: number,
+  oldRefB: number,
+  newRefA: number,
+  newRefB: number,
+): { trees: TreeEntry[]; error: string | null } {
+  if (newRefA === newRefB || !trees[newRefA] || !trees[newRefB]) {
+    return { trees, error: 'Pick two different trees as references.' }
+  }
+  if (newRefA === oldRefA && newRefB === oldRefB) {
+    return { trees, error: null }
+  }
+
+  const { positions: oldPositions } = buildTreePositions(trees, oldRefA, oldRefB)
+  const newOrigin = oldPositions[newRefA]
+  const newXAxis = oldPositions[newRefB]
+  if (!newOrigin || !newXAxis) {
+    return {
+      trees,
+      error:
+        "Can't switch automatically yet — make sure both new reference trees have valid distances to the current references first.",
+    }
+  }
+
+  const angle = Math.atan2(newXAxis.y - newOrigin.y, newXAxis.x - newOrigin.x)
+  const cos = Math.cos(-angle)
+  const sin = Math.sin(-angle)
+  const toNewFrame = (p: Point): Point => {
+    const dx = p.x - newOrigin.x
+    const dy = p.y - newOrigin.y
+    return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
+  }
+  // 2 decimals, not 1: rounding two related distances more coarsely can
+  // collide exactly on the triangle-inequality boundary (e.g. 6.0 + 2.5 =
+  // 8.5, invalidating an otherwise-fine reconstruction) even though the true
+  // unrounded geometry — preserved exactly by the rigid transform above — was
+  // never actually degenerate. 2 decimals keeps enough headroom to avoid that
+  // in practice.
+  const round = (n: number) => Math.round(n * 100) / 100
+  const newRefBPos = toNewFrame(newXAxis)
+
+  const updated = trees.map((tree, i) => {
+    if (i === newRefA) {
+      return { ...tree, distToFirst: 0, distToSecond: 0, flipSide: false }
+    }
+    const oldPos = oldPositions[i]
+    if (!oldPos) return tree // couldn't place this one before either — nothing to derive it from
+    const p = toNewFrame(oldPos)
+    if (i === newRefB) {
+      return { ...tree, distToFirst: round(Math.hypot(p.x, p.y)), distToSecond: 0, flipSide: false }
+    }
+    return {
+      ...tree,
+      distToFirst: round(Math.hypot(p.x, p.y)),
+      distToSecond: round(distance(p, newRefBPos)),
+      flipSide: p.y < 0,
+    }
+  })
+
+  return { trees: updated, error: null }
 }
 
 function combinations3(n: number): Array<[number, number, number]> {
@@ -796,13 +878,15 @@ export function rankCombinations(
   trees: TreeEntry[],
   settings: Settings,
   topN = 5,
+  refA = 0,
+  refB = 1,
 ): {
   combos: ComboResult[]
   positionErrors: string[]
   totalEvaluated: number
   positions: Array<Point | null>
 } {
-  const { positions, errors } = buildTreePositions(trees)
+  const { positions, errors } = buildTreePositions(trees, refA, refB)
   const combos: ComboResult[] = []
   const { radius: tentRadius } = solveTentShape(settings)
 

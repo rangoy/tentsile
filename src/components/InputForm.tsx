@@ -1,11 +1,15 @@
-import type { Settings, TreeEntry } from '../types'
+import type { Settings, TreeEntry, TreeReferences } from '../types'
 import { CONNECT_BASE, CONNECT_LEG, STINGRAY_SIDE } from '../constants'
-import { MAX_TREES, MIN_TREES } from '../geometry'
+import { formatTreeDisplay, MAX_TREES, MIN_TREES } from '../geometry'
 import { NumberInput } from './NumberInput'
 
 interface Props {
   trees: TreeEntry[]
   onTreesChange: (trees: TreeEntry[]) => void
+  onRemoveTree: (index: number) => void
+  references: TreeReferences
+  onReferenceChange: (which: 'a' | 'b', newIndex: number) => void
+  referenceError: string | null
   settings: Settings
   onSettingsChange: (settings: Settings) => void
   positionErrors: string[]
@@ -17,7 +21,17 @@ function numberOrNull(raw: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function InputForm({ trees, onTreesChange, settings, onSettingsChange, positionErrors }: Props) {
+export function InputForm({
+  trees,
+  onTreesChange,
+  onRemoveTree,
+  references,
+  onReferenceChange,
+  referenceError,
+  settings,
+  onSettingsChange,
+  positionErrors,
+}: Props) {
   const updateTree = (index: number, patch: Partial<TreeEntry>) => {
     onTreesChange(trees.map((t, i) => (i === index ? { ...t, ...patch } : t)))
   }
@@ -26,22 +40,55 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
     onTreesChange([...trees, { label: '', diameter: null, distToFirst: 6, distToSecond: 6, flipSide: false }])
   }
 
-  const removeTree = (index: number) => {
-    onTreesChange(trees.filter((_, i) => i !== index))
-  }
-
   const setDiameter = (index: number, raw: string) => {
     const cm = numberOrNull(raw)
     updateTree(index, { diameter: cm === null ? null : cm / 100 })
   }
 
+  const refALabel = formatTreeDisplay(references.a + 1, trees[references.a]?.label ?? '')
+  const refBLabel = formatTreeDisplay(references.b + 1, trees[references.b]?.label ?? '')
+
   return (
     <div className="panel">
       <h2>Trees</h2>
       <p className="hint">
-        Tree 1 &amp; 2 set a baseline. Every tree after that needs its distance to Tree 1 and Tree
-        2 — no need to measure every pair.
+        {refALabel} &amp; {refBLabel} are the reference trees — every other tree needs its distance
+        to both. Hard to measure between those two? Pick a different pair below.
       </p>
+
+      <div className="field-grid reference-picker">
+        <label>
+          Reference A
+          <select value={references.a} onChange={(e) => onReferenceChange('a', Number(e.target.value))}>
+            {trees.map((tree, i) =>
+              i === references.b ? null : (
+                <option key={i} value={i}>
+                  {formatTreeDisplay(i + 1, tree.label)}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+        <label>
+          Reference B
+          <select value={references.b} onChange={(e) => onReferenceChange('b', Number(e.target.value))}>
+            {trees.map((tree, i) =>
+              i === references.a ? null : (
+                <option key={i} value={i}>
+                  {formatTreeDisplay(i + 1, tree.label)}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+      </div>
+      {referenceError && (
+        <ul className="check-list">
+          <li className="check-fail">
+            <span className="check-detail">{referenceError}</span>
+          </li>
+        </ul>
+      )}
 
       {positionErrors.length > 0 && (
         <ul className="check-list">
@@ -59,85 +106,89 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
             <tr>
               <th>#</th>
               <th>Label</th>
-              <th>→ T1 (m)</th>
-              <th>→ T2 (m)</th>
-              <th title="On the other side of the Tree1-Tree2 line">Flip</th>
+              <th>{`→ ${refALabel} (m)`}</th>
+              <th>{`→ ${refBLabel} (m)`}</th>
+              <th title={`On the other side of the ${refALabel}-${refBLabel} line`}>Flip</th>
               <th>⌀ (cm)</th>
               <th aria-hidden="true"></th>
             </tr>
           </thead>
           <tbody>
-            {trees.map((tree, index) => (
-              <tr key={index}>
-                <td className="cell-number">{index + 1}</td>
-                <td>
-                  <input
-                    className="tree-label-input"
-                    type="text"
-                    placeholder="optional"
-                    value={tree.label}
-                    onChange={(e) => updateTree(index, { label: e.target.value })}
-                  />
-                </td>
-                <td>
-                  {index === 0 ? (
-                    <span className="cell-dash">—</span>
-                  ) : (
-                    <NumberInput
-                      min={0}
-                      step={0.1}
-                      value={tree.distToFirst}
-                      onChange={(n) => updateTree(index, { distToFirst: n })}
-                    />
-                  )}
-                </td>
-                <td>
-                  {index <= 1 ? (
-                    <span className="cell-dash">—</span>
-                  ) : (
-                    <NumberInput
-                      min={0}
-                      step={0.1}
-                      value={tree.distToSecond}
-                      onChange={(n) => updateTree(index, { distToSecond: n })}
-                    />
-                  )}
-                </td>
-                <td>
-                  {index <= 1 ? (
-                    <span className="cell-dash">—</span>
-                  ) : (
+            {trees.map((tree, index) => {
+              const isRefA = index === references.a
+              const isRefB = index === references.b
+              return (
+                <tr key={index}>
+                  <td className="cell-number">{index + 1}</td>
+                  <td>
                     <input
-                      type="checkbox"
-                      checked={tree.flipSide}
-                      onChange={(e) => updateTree(index, { flipSide: e.target.checked })}
+                      className="tree-label-input"
+                      type="text"
+                      placeholder="optional"
+                      value={tree.label}
+                      onChange={(e) => updateTree(index, { label: e.target.value })}
                     />
-                  )}
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    placeholder="40"
-                    value={tree.diameter === null ? '' : Math.round(tree.diameter * 100)}
-                    onChange={(e) => setDiameter(index, e.target.value)}
-                  />
-                </td>
-                <td>
-                  {index >= 2 && trees.length > MIN_TREES && (
-                    <button
-                      type="button"
-                      className="icon-button"
-                      onClick={() => removeTree(index)}
-                      aria-label={`Remove tree ${index + 1}`}
-                    >
-                      ×
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td>
+                    {isRefA ? (
+                      <span className="cell-dash">—</span>
+                    ) : (
+                      <NumberInput
+                        min={0}
+                        step={0.1}
+                        value={tree.distToFirst}
+                        onChange={(n) => updateTree(index, { distToFirst: n })}
+                      />
+                    )}
+                  </td>
+                  <td>
+                    {isRefA || isRefB ? (
+                      <span className="cell-dash">—</span>
+                    ) : (
+                      <NumberInput
+                        min={0}
+                        step={0.1}
+                        value={tree.distToSecond}
+                        onChange={(n) => updateTree(index, { distToSecond: n })}
+                      />
+                    )}
+                  </td>
+                  <td>
+                    {isRefA || isRefB ? (
+                      <span className="cell-dash">—</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={tree.flipSide}
+                        onChange={(e) => updateTree(index, { flipSide: e.target.checked })}
+                      />
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="40"
+                      value={tree.diameter === null ? '' : Math.round(tree.diameter * 100)}
+                      onChange={(e) => setDiameter(index, e.target.value)}
+                    />
+                  </td>
+                  <td>
+                    {!isRefA && !isRefB && trees.length > MIN_TREES && (
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => onRemoveTree(index)}
+                        aria-label={`Remove tree ${index + 1}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

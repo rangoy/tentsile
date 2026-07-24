@@ -1,6 +1,8 @@
 import * as d3 from 'd3'
+import { useRef, type ReactNode } from 'react'
 import type { ComboResult, CheckStatus, FitResult, OtherTreePoint, Point, TreeLabels } from '../types'
 import { DEFAULT_TRUNK_DIAMETER, signedDistanceToTriangle } from '../geometry'
+import { useZoomPan } from '../useZoomPan'
 import { ComboTabs } from './ComboTabs'
 
 interface Props {
@@ -31,6 +33,17 @@ function angleBetween(center: Point, p: Point): number {
   return Math.atan2(p.y - center.y, p.x - center.x)
 }
 
+/**
+ * Anchors children at `at` (in the same pre-zoom coordinate space as the rest
+ * of the diagram) but counter-scales by 1/zoomScale, so labels keep a
+ * constant apparent size — and stay legible/uncluttered — while the
+ * surrounding geometry (trees, straps, tent) scales normally with zoom.
+ * Children should be positioned relative to (0, 0), not `at`.
+ */
+function ScreenSpace({ at, zoomScale, children }: { at: Point; zoomScale: number; children: ReactNode }) {
+  return <g transform={`translate(${at.x} ${at.y}) scale(${1 / zoomScale})`}>{children}</g>
+}
+
 export function Visualization({
   fit,
   diameters,
@@ -42,6 +55,8 @@ export function Visualization({
   tailLength,
 }: Props) {
   const { triangle } = fit
+  const svgRef = useRef<SVGSVGElement>(null)
+  const { transform, scale, handlers, zoomIn, zoomOut, reset, isDefault } = useZoomPan(svgRef, selectedKey)
 
   if (!triangle.valid) {
     return (
@@ -132,7 +147,16 @@ export function Visualization({
     <div className="panel">
       <ComboTabs combos={combos} selectedKey={selectedKey} onSelect={onSelectCombo} />
       <h2>Layout</h2>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="viz-svg" role="img" aria-label="Tree and tent layout">
+      <div className="viz-canvas">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          className="viz-svg"
+          role="img"
+          aria-label="Tree and tent layout — scroll or pinch to zoom, drag to pan"
+          {...handlers}
+        >
+          <g transform={transform}>
         {edges.map((edge) => {
           const p1 = project(edge.from)
           const p2 = project(edge.to)
@@ -204,10 +228,12 @@ export function Visualization({
                 strokeWidth={2}
                 strokeDasharray="2 4"
               />
-              <rect x={mid.x - labelWidth / 2} y={mid.y - 9} width={labelWidth} height={16} fill="white" opacity={0.85} rx={3} />
-              <text x={mid.x} y={mid.y + 3} textAnchor="middle" fontSize={11} fill="#333">
-                {label}
-              </text>
+              <ScreenSpace at={mid} zoomScale={scale}>
+                <rect x={-labelWidth / 2} y={-9} width={labelWidth} height={16} fill="white" opacity={0.85} rx={3} />
+                <text x={0} y={3} textAnchor="middle" fontSize={11} fill="#333">
+                  {label}
+                </text>
+              </ScreenSpace>
             </g>
           )
         })}
@@ -234,9 +260,11 @@ export function Visualization({
         {trees.map((tree) => {
           const p = project(tree.pos)
           return (
-            <text key={`tree-label-${tree.id}`} x={p.x} y={p.y - 16} textAnchor="middle" fontSize={13} fontWeight={600}>
-              {labels[tree.id]}
-            </text>
+            <ScreenSpace at={p} zoomScale={scale} key={`tree-label-${tree.id}`}>
+              <text x={0} y={-16} textAnchor="middle" fontSize={13} fontWeight={600}>
+                {labels[tree.id]}
+              </text>
+            </ScreenSpace>
           )
         })}
 
@@ -255,17 +283,19 @@ export function Visualization({
                 stroke={colliding ? '#7a2318' : '#6b6b63'}
                 strokeWidth={1}
               />
-              <text
-                x={p.x}
-                y={p.y - 14}
-                textAnchor="middle"
-                fontSize={12}
-                fontWeight={colliding ? 700 : 400}
-                fill={colliding ? '#c0392b' : '#6b6b63'}
-              >
-                {tree.display}
-                {colliding ? ' ⚠' : ''}
-              </text>
+              <ScreenSpace at={p} zoomScale={scale}>
+                <text
+                  x={0}
+                  y={-14}
+                  textAnchor="middle"
+                  fontSize={12}
+                  fontWeight={colliding ? 700 : 400}
+                  fill={colliding ? '#c0392b' : '#6b6b63'}
+                >
+                  {tree.display}
+                  {colliding ? ' ⚠' : ''}
+                </text>
+              </ScreenSpace>
             </g>
           )
         })}
@@ -278,23 +308,39 @@ export function Visualization({
           let bisector = (a1 + a2) / 2
           if (Math.cos(a1 - bisector) < 0) bisector += Math.PI
           const labelOffset = 26
-          const lx = p.x + Math.cos(bisector) * labelOffset
-          const ly = p.y - Math.sin(bisector) * labelOffset
+          const lx = Math.cos(bisector) * labelOffset
+          const ly = -Math.sin(bisector) * labelOffset
           return (
-            <text
-              key={angle.id}
-              x={lx}
-              y={ly}
-              textAnchor="middle"
-              fontSize={11}
-              fill={STATUS_COLOR[checkStatus[angle.id] ?? 'pass']}
-              fontWeight={600}
-            >
-              {angle.value.toFixed(0)}°
-            </text>
+            <ScreenSpace at={p} zoomScale={scale} key={angle.id}>
+              <text
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                fontSize={11}
+                fill={STATUS_COLOR[checkStatus[angle.id] ?? 'pass']}
+                fontWeight={600}
+              >
+                {angle.value.toFixed(0)}°
+              </text>
+            </ScreenSpace>
           )
         })}
-      </svg>
+          </g>
+        </svg>
+        <div className="viz-controls">
+          <button type="button" onClick={zoomOut} aria-label="Zoom out">
+            −
+          </button>
+          {!isDefault && (
+            <button type="button" onClick={reset} aria-label="Reset view" className="viz-reset-button">
+              Reset
+            </button>
+          )}
+          <button type="button" onClick={zoomIn} aria-label="Zoom in">
+            +
+          </button>
+        </div>
+      </div>
       <details className="legend-details">
         <summary>Legend</summary>
         <p className="hint">
@@ -305,7 +351,8 @@ export function Visualization({
           is closer than the tail itself. Faint gray dots = other trees in your grove not used by this
           combination; a red dot (⚠) means that tree obstructs the tent footprint. Colors follow the
           checks below (green = pass, amber = tight, red = fail). The closer a strap lines up with its
-          gray center line, the tighter/more even the pitch.
+          gray center line, the tighter/more even the pitch. Scroll/pinch to zoom, drag to pan, or use
+          the +/− controls.
         </p>
       </details>
     </div>

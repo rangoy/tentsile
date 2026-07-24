@@ -449,9 +449,14 @@ main {
   background: rgba(192, 57, 43, 0.18);
 }
 
+.viz-canvas {
+  position: relative;
+}
+
 .viz-svg {
   width: 100%;
   height: auto;
+  display: block;
   background: repeating-linear-gradient(
     0deg,
     rgba(128, 128, 128, 0.05),
@@ -460,4 +465,49 @@ main {
     transparent 40px
   );
   border-radius: 8px;
+  /* Custom wheel/pointer handlers own zoom and pan — stop the browser's own
+     touch scrolling/pinch-zoom from fighting with them. */
+  touch-action: none;
+  /* Dragging to pan would otherwise start a native text selection. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+
+.viz-svg:active {
+  cursor: grabbing;
+}
+
+.viz-controls {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.viz-controls button {
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.viz-controls button:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+.viz-reset-button {
+  width: auto !important;
+  padding: 0 0.5rem;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
 }

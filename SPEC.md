@@ -267,6 +267,33 @@ verifying the result visually don't require scrolling.
 - Angle labels at each tree vertex.
 - Color coding for pass / tight-fit / fail per constraint.
 
+**Zoom & pan (v4)**: scroll wheel or pinch to zoom, drag to pan, plus +/− and
+"Reset view" buttons overlaid on the diagram. Built as a standalone `useZoomPan`
+hook (`src/useZoomPan.ts`) rather than d3-zoom, to avoid mixing D3's imperative
+DOM-event binding with React's rendering — it just tracks a `{x, y, scale}`
+camera in React state and applies it as a `transform` on a single `<g>` wrapping
+all the diagram's content, using the Pointer Events API so mouse and touch share
+one code path (pinch-zoom tracks up to two simultaneous pointers). The camera
+resets to default when the selected combination changes, but persists across
+minor input edits within the same combination.
+
+A few non-obvious fixes were needed to get this right:
+- React's synthetic `onWheel` can end up bound as a passive listener
+  (browser-dependent), silently ignoring `preventDefault()` and letting the
+  *page* scroll underneath the diagram. Fixed with a native
+  `addEventListener('wheel', handler, { passive: false })` via `useEffect`
+  instead of a JSX `onWheel` prop.
+- `setPointerCapture` throws for synthetic/edge-case pointers; wrapped in
+  try/catch so it can't abort the rest of the handler.
+- Dragging to pan would otherwise start a native text selection — fixed with
+  `user-select: none` on the SVG.
+- Labels (tree numbers, strap lengths, angles) are wrapped in a small
+  `ScreenSpace` helper that anchors them at their diagram position but
+  counter-scales by `1/cameraScale`, so they stay a constant, legible size
+  while the surrounding geometry (trees, straps, tent) scales normally with
+  zoom — the point of zooming in is to give the *geometry* more room, not to
+  blow up text until it collides with itself.
+
 ## 7. Tech stack (final)
 
 - Single-page app, client-side only (no backend needed — pure geometry/math).
@@ -312,5 +339,6 @@ All open questions from the draft have been resolved:
 | Tree identity (v3) | 1-based position is the stable identity; free-text label is optional, empty by default, shown as `number (label)` when set |
 | Tail handling (v3) | Reach stays raw (unaffected by tail); ratchet-only length (reach − tail) is a derived, secondary figure shown in parentheses; strapMax and max-edge-distance checks apply to the tail-adjusted figures, not raw reach |
 | Basket loop (v3) | `ratchet < 0` flags `tight` (not fail) with a link to Tentsile's basket-loop guide; the flat 5 m minimum edge distance was removed since this per-corner check covers it more precisely |
+| Zoom/pan (v4) | Custom `useZoomPan` hook (not d3-zoom), full touch support via Pointer Events, constant-size labels via counter-scaling |
 
 Spec is considered final for the current implementation.

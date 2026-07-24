@@ -189,13 +189,20 @@ function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], 
   let best = initial
   let step = radius * 0.5
   const MIN_STEP = radius * 1e-5
+  // Guards against near-duplicate/degenerate tree positions, where floating-point
+  // noise in sumSquaredBend can otherwise look like an "improvement" every round
+  // forever — without this, `step` never shrinks and the loop below never exits.
+  const MIN_IMPROVEMENT = 1e-9
+  const MAX_ITERATIONS = 200
   const directions = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },
     { x: 0, y: 1 },
     { x: 0, y: -1 },
   ]
-  while (step > MIN_STEP) {
+  let iterations = 0
+  while (step > MIN_STEP && iterations < MAX_ITERATIONS) {
+    iterations++
     let improved = false
     for (const dir of directions) {
       const candidate = evaluateCenter(
@@ -205,7 +212,7 @@ function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], 
         radius,
       )
       const introducesOvershoot = candidate.overshoot.some((o, i) => o && !best.overshoot[i])
-      if (introducesOvershoot || candidate.sumSquaredBend >= best.sumSquaredBend) continue
+      if (introducesOvershoot || candidate.sumSquaredBend >= best.sumSquaredBend - MIN_IMPROVEMENT) continue
       best = candidate
       improved = true
     }

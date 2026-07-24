@@ -16,12 +16,21 @@ export const DEFAULT_SETTINGS: Settings = {
   tentLegLength: STINGRAY_SIDE,
   tentBaseLength: STINGRAY_SIDE,
   strapMax: 6,
-  tailLength: 0.5,
+  ratchetLength: 0.5,
 }
 
-/** Settings persisted before the Connect (non-equilateral) tent shape was added lack these fields — treat as stale. */
+/**
+ * Settings persisted before the Connect (non-equilateral) tent shape was added
+ * lack tentLegLength/tentBaseLength, and settings persisted before the
+ * tail→ratchet rename (v8) lack ratchetLength (they have the old tailLength
+ * field instead) — treat either as stale.
+ */
 export function isValidSettings(value: Settings): boolean {
-  return typeof value.tentLegLength === 'number' && typeof value.tentBaseLength === 'number'
+  return (
+    typeof value.tentLegLength === 'number' &&
+    typeof value.tentBaseLength === 'number' &&
+    typeof value.ratchetLength === 'number'
+  )
 }
 
 export const DEFAULT_REFERENCES: TreeReferences = { a: 0, b: 1 }

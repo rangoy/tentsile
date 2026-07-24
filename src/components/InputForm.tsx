@@ -242,7 +242,7 @@ export function InputForm({
             />
           </label>
           <label>
-            Max ratchet strap length (m)
+            Max strap length (m)
             <NumberInput
               min={0.1}
               step={0.1}
@@ -251,12 +251,12 @@ export function InputForm({
             />
           </label>
           <label>
-            Tail/tether length (m)
+            Ratchet length (m)
             <NumberInput
               min={0}
               step={0.05}
-              value={settings.tailLength}
-              onChange={(n) => onSettingsChange({ ...settings, tailLength: n })}
+              value={settings.ratchetLength}
+              onChange={(n) => onSettingsChange({ ...settings, ratchetLength: n })}
             />
           </label>
         </div>

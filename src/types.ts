@@ -29,10 +29,10 @@ export interface Settings {
    */
   tentLegLength: number
   tentBaseLength: number
-  /** maximum ratchet strap length, in meters */
+  /** maximum (adjustable) strap length, in meters */
   strapMax: number
-  /** fixed tail/tether length between tent corner and ratchet buckle, in meters */
-  tailLength: number
+  /** fixed ratchet length between tent corner and strap, in meters */
+  ratchetLength: number
 }
 
 export type CheckStatus = 'pass' | 'tight' | 'fail'
@@ -138,14 +138,14 @@ export interface FitResult {
   cornerA: Point
   cornerB: Point
   cornerC: Point
-  /** raw geometric reach per corner, in meters (no tail or trunk wrap subtracted) */
+  /** raw geometric reach per corner, in meters (no ratchet or trunk wrap subtracted) */
+  reachA: number
+  reachB: number
+  reachC: number
+  /** strap-only length per corner, in meters (reach minus the fixed ratchet; negative = basket loop needed) */
   strapA: number
   strapB: number
   strapC: number
-  /** ratchet-only length per corner, in meters (strap minus the fixed tail; negative = basket loop needed) */
-  ratchetA: number
-  ratchetB: number
-  ratchetC: number
   checks: CheckResult[]
   overallVerdict: CheckStatus
 }

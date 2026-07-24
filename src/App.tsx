@@ -77,7 +77,7 @@ export default function App() {
               combos={combos}
               selectedKey={comboKey(selected)}
               onSelectCombo={setSelectedKey}
-              tailLength={settings.tailLength}
+              ratchetLength={settings.ratchetLength}
             />
           )}
         </div>
@@ -96,7 +96,7 @@ export default function App() {
         </div>
         <div className="grid-results">
           {selected && selectedDiameters && (
-            <ResultsPanel fit={selected.fit} labels={selected.labels} tailLength={settings.tailLength} />
+            <ResultsPanel fit={selected.fit} labels={selected.labels} ratchetLength={settings.ratchetLength} />
           )}
         </div>
       </main>

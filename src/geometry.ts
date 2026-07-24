@@ -11,7 +11,6 @@ import type {
   TriangleSolution,
 } from './types'
 
-export const MIN_TREE_DISTANCE = 5
 export const ANGLE_OK_MAX = 80
 export const ANGLE_TIGHT_MAX = 100
 export const DEFAULT_TRUNK_DIAMETER = 0.4
@@ -165,6 +164,9 @@ export function computeFit(
       strapA: 0,
       strapB: 0,
       strapC: 0,
+      ratchetA: 0,
+      ratchetB: 0,
+      ratchetC: 0,
       checks,
       overallVerdict: 'fail',
     }
@@ -204,13 +206,24 @@ export function computeFit(
   const circumferenceC = Math.PI * diameterC
 
   // Strap length is the raw geometric reach from the (Fermat-point-positioned)
-  // tent corner to the tree, minus the tail/tether length only. Trunk
-  // circumference is deliberately NOT subtracted here — verified against a
-  // reference implementation (Tentsile Triangulator) that reports the raw
-  // reach; trunk thickness still factors into the max-distance check below.
-  const strapA = distance(cornerA, A) - settings.tailLength
-  const strapB = distance(cornerB, B) - settings.tailLength
-  const strapC = distance(cornerC, C) - settings.tailLength
+  // tent corner to the tree — verified against a reference implementation
+  // (Tentsile Triangulator) that reports exactly this raw reach. Neither the
+  // tail/tether length nor trunk circumference is subtracted from it; trunk
+  // thickness still factors into the max-distance check below, and the tail
+  // is handled separately (see "Tail fit" checks) since it's a fixed segment
+  // between the tent corner and the ratchet buckle, not part of the ratchet
+  // strap's own adjustable length.
+  const strapA = distance(cornerA, A)
+  const strapB = distance(cornerB, B)
+  const strapC = distance(cornerC, C)
+
+  // Portion of the reach left for the adjustable ratchet strap once the fixed
+  // tail is accounted for. Negative means the tree is closer than the tail
+  // itself reaches — a basket loop (skip the tail, loop the strap directly
+  // around the trunk) is needed instead of the standard tail+ratchet setup.
+  const ratchetA = strapA - settings.tailLength
+  const ratchetB = strapB - settings.tailLength
+  const ratchetC = strapC - settings.tailLength
 
   // --- Distance checks (min/max tree-to-tree spacing) ---
   const edges: Array<{
@@ -225,24 +238,30 @@ export function computeFit(
   ]
 
   for (const edge of edges) {
-    const maxDist = 2 * settings.strapMax + settings.tentSide - edge.circumSum
-    const center = (MIN_TREE_DISTANCE + maxDist) / 2
-    const halfRange = (maxDist - MIN_TREE_DISTANCE) / 2
-    const margin = halfRange > 0 ? 1 - Math.abs(edge.dist - center) / halfRange : -1
-    if (edge.dist < MIN_TREE_DISTANCE) {
+    // Reach without leaning on the tail's extra length, vs. the true max once
+    // both corners' fixed tails are counted too (each tail adds its own length
+    // to that corner's reach, since the tail is in series with the ratchet strap).
+    const maxDistNoTail = 2 * settings.strapMax + settings.tentSide - edge.circumSum
+    const maxDist = maxDistNoTail + 2 * settings.tailLength
+    // No hard minimum here: trees closer together are workable with a basket
+    // loop (skip the tail, loop the strap directly around the trunk), which is
+    // exactly what the per-corner "Tail fit" check below already flags — so
+    // margin only tracks headroom below the max reach, not a lower bound.
+    const margin = maxDist > 0 ? (maxDist - edge.dist) / maxDist : -1
+    if (edge.dist > maxDist) {
       checks.push({
         id: edge.id,
         label: edge.label,
         status: 'fail',
-        detail: `${edge.dist.toFixed(2)} m is below the ${MIN_TREE_DISTANCE.toFixed(1)} m minimum for this tent.`,
+        detail: `${edge.dist.toFixed(2)} m exceeds the ${maxDist.toFixed(2)} m max reach with a ${settings.strapMax.toFixed(1)} m strap and ${settings.tailLength.toFixed(2)} m tail.`,
         margin,
       })
-    } else if (edge.dist > maxDist) {
+    } else if (edge.dist > maxDistNoTail) {
       checks.push({
         id: edge.id,
         label: edge.label,
-        status: 'fail',
-        detail: `${edge.dist.toFixed(2)} m exceeds the ${maxDist.toFixed(2)} m max reach with a ${settings.strapMax.toFixed(1)} m strap.`,
+        status: 'tight',
+        detail: `${edge.dist.toFixed(2)} m relies on the tail's reach (max without it: ${maxDistNoTail.toFixed(2)} m, with it: ${maxDist.toFixed(2)} m).`,
         margin,
       })
     } else {
@@ -250,7 +269,7 @@ export function computeFit(
         id: edge.id,
         label: edge.label,
         status: 'pass',
-        detail: `${edge.dist.toFixed(2)} m (max reach ${maxDist.toFixed(2)} m).`,
+        detail: `${edge.dist.toFixed(2)} m (max reach ${maxDistNoTail.toFixed(2)} m).`,
         margin,
       })
     }
@@ -321,27 +340,25 @@ export function computeFit(
   }
 
   // --- Strap length checks ---
-  const straps: Array<{ id: string; label: string; value: number }> = [
-    { id: 'strapA', label: `Strap to ${labels.A}`, value: strapA },
-    { id: 'strapB', label: `Strap to ${labels.B}`, value: strapB },
-    { id: 'strapC', label: `Strap to ${labels.C}`, value: strapC },
+  // The strapMax setting is the ratchet strap's own max length — it doesn't
+  // include the fixed tail, which is separate hardware in series with it. So
+  // the limit applies to the ratchet-only portion, not the raw total reach.
+  const straps: Array<{ id: string; label: string; strap: number; ratchet: number }> = [
+    { id: 'strapA', label: `Strap to ${labels.A}`, strap: strapA, ratchet: ratchetA },
+    { id: 'strapB', label: `Strap to ${labels.B}`, strap: strapB, ratchet: ratchetB },
+    { id: 'strapC', label: `Strap to ${labels.C}`, strap: strapC, ratchet: ratchetC },
   ]
   for (const strap of straps) {
-    const margin = (settings.strapMax - strap.value) / settings.strapMax
-    if (strap.value > settings.strapMax) {
+    const margin = (settings.strapMax - strap.ratchet) / settings.strapMax
+    if (strap.ratchet > settings.strapMax) {
       checks.push({
         id: strap.id,
         label: strap.label,
         status: 'fail',
-        detail: `${strap.value.toFixed(2)} m needed, longer than your ${settings.strapMax.toFixed(1)} m strap.`,
-        margin,
-      })
-    } else if (strap.value < 0) {
-      checks.push({
-        id: strap.id,
-        label: strap.label,
-        status: 'pass',
-        detail: `The tail alone already covers the gap — little to no ratchet strap extension needed, expect slack to take up.`,
+        detail:
+          settings.tailLength > 0
+            ? `${strap.ratchet.toFixed(2)} m of ratchet strap needed (after the ${settings.tailLength.toFixed(2)} m tail), longer than your ${settings.strapMax.toFixed(1)} m strap.`
+            : `${strap.strap.toFixed(2)} m needed, longer than your ${settings.strapMax.toFixed(1)} m strap.`,
         margin,
       })
     } else {
@@ -349,9 +366,38 @@ export function computeFit(
         id: strap.id,
         label: strap.label,
         status: 'pass',
-        detail: `${strap.value.toFixed(2)} m needed.`,
+        detail: `${strap.strap.toFixed(2)} m needed.`,
         margin,
       })
+    }
+  }
+
+  // --- Tail fit checks (only meaningful once a tail/tether length is set) ---
+  if (settings.tailLength > 0) {
+    const tails: Array<{ id: string; label: string; ratchet: number }> = [
+      { id: 'tailA', label: `Tail fit at ${labels.A}`, ratchet: ratchetA },
+      { id: 'tailB', label: `Tail fit at ${labels.B}`, ratchet: ratchetB },
+      { id: 'tailC', label: `Tail fit at ${labels.C}`, ratchet: ratchetC },
+    ]
+    for (const tail of tails) {
+      const margin = tail.ratchet / settings.tailLength
+      if (tail.ratchet < 0) {
+        checks.push({
+          id: tail.id,
+          label: tail.label,
+          status: 'tight',
+          detail: `Tree is closer than the ${settings.tailLength.toFixed(2)} m tail — use a basket loop (loop the strap directly around the tree, skipping the tail) instead.`,
+          margin,
+        })
+      } else {
+        checks.push({
+          id: tail.id,
+          label: tail.label,
+          status: 'pass',
+          detail: `${tail.ratchet.toFixed(2)} m of ratchet strap needed after the ${settings.tailLength.toFixed(2)} m tail.`,
+          margin,
+        })
+      }
     }
   }
 
@@ -406,6 +452,9 @@ export function computeFit(
     strapA,
     strapB,
     strapC,
+    ratchetA,
+    ratchetB,
+    ratchetC,
     checks,
     overallVerdict,
   }

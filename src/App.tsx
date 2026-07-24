@@ -53,6 +53,7 @@ export default function App() {
               combos={combos}
               selectedKey={comboKey(selected)}
               onSelectCombo={setSelectedKey}
+              tailLength={settings.tailLength}
             />
           )}
         </div>
@@ -66,7 +67,9 @@ export default function App() {
           />
         </div>
         <div className="grid-results">
-          {selected && selectedDiameters && <ResultsPanel fit={selected.fit} labels={selected.labels} />}
+          {selected && selectedDiameters && (
+            <ResultsPanel fit={selected.fit} labels={selected.labels} tailLength={settings.tailLength} />
+          )}
         </div>
       </main>
       <footer className="disclaimer">

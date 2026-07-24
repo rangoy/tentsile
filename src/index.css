@@ -251,6 +251,12 @@ main {
   opacity: 0.85;
 }
 
+.check-detail a {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .checks-details summary,
 .settings-details summary,
 .legend-details summary {

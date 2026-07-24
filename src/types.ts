@@ -105,10 +105,14 @@ export interface FitResult {
   cornerA: Point
   cornerB: Point
   cornerC: Point
-  /** required strap length per corner, in meters (after subtracting tail + trunk wrap) */
+  /** raw geometric reach per corner, in meters (no tail or trunk wrap subtracted) */
   strapA: number
   strapB: number
   strapC: number
+  /** ratchet-only length per corner, in meters (strap minus the fixed tail; negative = basket loop needed) */
+  ratchetA: number
+  ratchetB: number
+  ratchetC: number
   checks: CheckResult[]
   overallVerdict: CheckStatus
 }

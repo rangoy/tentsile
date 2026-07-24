@@ -87,15 +87,17 @@ v1 model:
    and the corner-to-tree strap. Expected to be ~0° for any triangle that passes
    the angle checks; flagged tight above 2° and failing above 7° (Tentsile's own
    stated tolerance) as a safety net for edge cases.
-5. **Strap length per corner** = straight-line distance from the positioned tent
-   corner to its tree, **minus** the tail/tether length (0 by default — see below).
-   Trunk circumference is **not** subtracted from this figure.
+5. **Strap length per corner** ("reach") = straight-line distance from the
+   positioned tent corner to its tree. Neither the tail/tether length nor trunk
+   circumference is subtracted from this number — it's the raw geometric reach.
 6. **Validation checks**:
    - Triangle inequality (must form a real triangle at all).
-   - Each side length within [min distance, max distance] from §2.
+   - Each side length within [min distance, max distance] from §2 (see "Tail
+     handling" below for how the tail affects the max).
    - Each interior angle flagged: OK (<80°), tight fit (80–100°), fail (>~100°,
      configurable).
-   - Each computed strap length within [0, max ratchet strap length].
+   - Ratchet-only length (reach minus tail) within [0, max ratchet strap length]
+     — see "Tail handling" below.
    - Trunk diameter ≥ 30 cm (if entered).
    - Bend per corner, per step 4 above.
 7. **Verdict**: overall pass / tight-fit-but-workable / fail, with a specific reason
@@ -110,18 +112,48 @@ should be good enough for field planning purposes.
 Triangulator") that appears to implement this same "point every corner straight at
 its tree" idea was found and cross-checked against a real example (6/9/8 m tree
 distances, Stingray 4.1 m tent): our raw geometric reach per corner matched its
-displayed strap lengths exactly (3.86 m / 1.72 m / 0.43 m) once tail length was set
-to 0 and trunk circumference was not subtracted. This is strong evidence the Fermat
-point model in §3 is not just a reasonable approximation but the actual approach
-real tools use — so the tail length now **defaults to 0 m** (edit it if you want a
-strap length that already accounts for a tail/tether segment), and trunk
-circumference is no longer subtracted from the strap length at all (it's still used
-for the min-30cm-diameter check and the max-distance-per-edge rule of thumb, which
-are independent checks based on Tentsile's own published guidance).
+displayed strap lengths exactly (3.86 m / 1.72 m / 0.43 m). This is strong evidence
+the Fermat point model in §3 is not just a reasonable approximation but the actual
+approach real tools use — the "reach" figure in step 5 is exactly this raw distance,
+unaffected by the tail/tether setting.
 
-If tail length is set above 0 and exceeds the geometric gap at a corner, the
-computed strap length can go negative — the UI clamps this to "0 m (slack)" rather
-than showing a negative number.
+**Tail handling (v3)**: the tail is a fixed length of webbing between the tent
+corner and the ratchet buckle, in series with the adjustable ratchet strap — a
+separate physical piece of hardware, not drawn from the same length budget as the
+ratchet strap. So it's handled entirely as a derived, secondary figure rather than
+being subtracted from the primary "reach":
+
+- `ratchet = reach − tailLength` — the ratchet-only length needed. Shown in
+  parentheses next to the main reach figure (e.g. `2.26 m (1.76 m)`), and only
+  once `tailLength > 0`.
+- The **strap-length check** (§6) compares `ratchet`, not raw `reach`, against the
+  max ratchet strap length setting — since the max is a property of the ratchet
+  strap alone. A `reach` that exceeds the max but whose `ratchet` doesn't is a
+  **pass**, not a fail (this was a bug in an earlier iteration: `reach` was being
+  checked directly against the max, effectively double-counting the tail as part
+  of the ratchet strap's own budget).
+- The **max-distance-per-edge check** (§2's rule of thumb) similarly needs the
+  tail added back in: each corner's true max reach is `tailLength + strapMax`, not
+  just `strapMax`, so the maximum edge distance is
+  `2 × (strapMax + tailLength) + tentSide − circumference`. A distance beyond the
+  no-tail max (`2 × strapMax + tentSide − circumference`) but within this
+  tail-inclusive max is flagged **tight** (relies on the tail's reach to work) —
+  the same bug as above, applied to the edge-distance check.
+- If `ratchet < 0` (the tree is closer than the tail itself reaches), the
+  standard tail+ratchet setup doesn't apply — a **basket loop** is needed instead
+  (loop the ratchet strap directly around the tree, skipping the tail entirely).
+  Flagged as **tight** (workable, just a different technique), not fail, with a
+  link to Tentsile's own basket-loop guide
+  (`tentsile.com/pages/guides-tips-tricks#closetrees`) next to the message.
+- Default tail length is **0.5 m** (Tentsile's "ratchet + tail" spec from §2),
+  not 0 — 0 just turns off all of the above (no parenthetical, no basket-loop
+  check, checks against raw reach directly).
+- The **5 m minimum edge distance** from §2 is no longer a hard fail: Tentsile's
+  own guidance is that it only applies *without* a basket loop, and the
+  per-corner basket-loop check above already covers that case more precisely
+  (using the tent's actual tail length rather than a flat constant). Short
+  distances now just show up as a `tight` basket-loop note at the affected
+  corners instead of an unconditional edge-level fail.
 
 ## 3b. Multi-tree grove & best-fit ranking (v2)
 
@@ -208,7 +240,9 @@ pairwise-adjacent measuring burden (2 distances per extra tree) stays reasonable
 
 - Ranked tabs for viable 3-tree combinations, atop the Layout card (§3b).
 - Pass/fail/tight-fit verdict with human-readable reasons for the selected one.
-- Strap length required per corner (A, B, C).
+- Strap length (reach) required per corner (A, B, C), with the ratchet-only
+  length in parentheses once a tail length is set (§3 "Tail handling"), or a
+  basket-loop note if the tree is closer than the tail itself.
 - Computed interior angles per tree.
 - Whether any other grove tree obstructs the tent footprint (§3b).
 - Visualization (see §6).
@@ -223,7 +257,11 @@ verifying the result visually don't require scrolling.
   diameter if given).
 - Dashed triangle = the tent, in its computed (Fermat point) position.
 - Dotted lines from each tent corner to its tree = the straps, labeled with computed
-  length.
+  reach (ratchet-only length in parentheses, or "basket loop" — see §3 "Tail
+  handling").
+- Orange segment at the tent-corner end of each strap = the fixed tail, drawn
+  only once `tailLength > 0` and only when a basket loop isn't needed (there's
+  no separate tail segment in that case).
 - Gray dashed lines = tent center to each corner, for comparing strap alignment.
 - Faint gray points = other grove trees not in the selected combination (§3b).
 - Angle labels at each tree vertex.
@@ -245,7 +283,6 @@ verifying the result visually don't require scrolling.
 - Imperial units.
 - 3D / height modeling (attachment height vs. tent hang height) — flat 2D only.
 - 4th "floating anchor" tree fallback scenario.
-- Basket-loop technique (shorter min distance).
 - Uneven terrain / per-tree ground elevation.
 - Anti-roll strap calibration.
 - Multi-tent/hammock stacking configurations.
@@ -273,5 +310,7 @@ All open questions from the draft have been resolved:
 | Mobile layout (v3) | Compact tree table, Layout card on top, collapsible checks/settings/legend |
 | Combo display (v3) | Color-coded tabs (`1/2/3` format) docked atop the Layout card, replacing the ranked list |
 | Tree identity (v3) | 1-based position is the stable identity; free-text label is optional, empty by default, shown as `number (label)` when set |
+| Tail handling (v3) | Reach stays raw (unaffected by tail); ratchet-only length (reach − tail) is a derived, secondary figure shown in parentheses; strapMax and max-edge-distance checks apply to the tail-adjusted figures, not raw reach |
+| Basket loop (v3) | `ratchet < 0` flags `tight` (not fail) with a link to Tentsile's basket-loop guide; the flat 5 m minimum edge distance was removed since this per-corner check covers it more precisely |
 
 Spec is considered final for the current implementation.

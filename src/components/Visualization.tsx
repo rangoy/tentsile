@@ -11,6 +11,7 @@ interface Props {
   combos: ComboResult[]
   selectedKey: string
   onSelectCombo: (key: string) => void
+  tailLength: number
 }
 
 const WIDTH = 640
@@ -18,6 +19,7 @@ const HEIGHT = 480
 const PADDING = 56
 const MIN_TREE_RADIUS_PX = 7
 const MAX_TREE_RADIUS_PX = 22
+const TAIL_COLOR = '#e08214'
 
 const STATUS_COLOR: Record<CheckStatus, string> = {
   pass: '#2e8b57',
@@ -37,6 +39,7 @@ export function Visualization({
   combos,
   selectedKey,
   onSelectCombo,
+  tailLength,
 }: Props) {
   const { triangle } = fit
 
@@ -171,24 +174,39 @@ export function Visualization({
         })()}
 
         {trees.map((tree) => {
-          const p1 = project(tree.pos)
-          const p2 = project(tree.corner)
+          const p1 = project(tree.pos) // tree
+          const p2 = project(tree.corner) // tent corner — the tail starts here
           const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
           const strapLength = fit[`strap${tree.id}` as 'strapA' | 'strapB' | 'strapC']
+          const ratchetLength = fit[`ratchet${tree.id}` as 'ratchetA' | 'ratchetB' | 'ratchetC']
+          const basketLoopNeeded = tailLength > 0 && ratchetLength < 0
+          const showTailSegment = tailLength > 0 && !basketLoopNeeded
+          const fraction = showTailSegment && strapLength > 0 ? Math.min(tailLength / strapLength, 1) : 0
+          const split = { x: p2.x + fraction * (p1.x - p2.x), y: p2.y + fraction * (p1.y - p2.y) }
+          const label = basketLoopNeeded
+            ? `${strapLength.toFixed(2)} m (basket loop)`
+            : tailLength > 0
+              ? `${strapLength.toFixed(2)} m (${ratchetLength.toFixed(2)} m)`
+              : `${strapLength.toFixed(2)} m`
+          const labelWidth = 22 + label.length * 4.6
+
           return (
             <g key={`strap-${tree.id}`}>
+              {showTailSegment && (
+                <line x1={p2.x} y1={p2.y} x2={split.x} y2={split.y} stroke={TAIL_COLOR} strokeWidth={2.5} strokeDasharray="2 3" />
+              )}
               <line
-                x1={p1.x}
-                y1={p1.y}
-                x2={p2.x}
-                y2={p2.y}
+                x1={showTailSegment ? split.x : p2.x}
+                y1={showTailSegment ? split.y : p2.y}
+                x2={p1.x}
+                y2={p1.y}
                 stroke={STATUS_COLOR[checkStatus[tree.strapCheck] ?? 'pass']}
                 strokeWidth={2}
                 strokeDasharray="2 4"
               />
-              <rect x={mid.x - 24} y={mid.y - 9} width={48} height={16} fill="white" opacity={0.85} rx={3} />
+              <rect x={mid.x - labelWidth / 2} y={mid.y - 9} width={labelWidth} height={16} fill="white" opacity={0.85} rx={3} />
               <text x={mid.x} y={mid.y + 3} textAnchor="middle" fontSize={11} fill="#333">
-                {strapLength < 0 ? '0 m (slack)' : `${strapLength.toFixed(2)} m`}
+                {label}
               </text>
             </g>
           )
@@ -281,10 +299,13 @@ export function Visualization({
         <summary>Legend</summary>
         <p className="hint">
           Solid triangle = trees in this combination, dashed blue triangle = tent, dotted lines =
-          straps, gray dashed lines = tent center to corner. Faint gray dots = other trees in your
-          grove not used by this combination; a red dot (⚠) means that tree obstructs the tent
-          footprint. Colors follow the checks below (green = pass, amber = tight, red = fail). The
-          closer a strap lines up with its gray center line, the tighter/more even the pitch.
+          straps, gray dashed lines = tent center to corner. Orange = the fixed tail between the tent
+          corner and the ratchet buckle (only shown once a tail length is set) — the label past it
+          shows total reach with the ratchet-only length in parentheses, or "basket loop" if the tree
+          is closer than the tail itself. Faint gray dots = other trees in your grove not used by this
+          combination; a red dot (⚠) means that tree obstructs the tent footprint. Colors follow the
+          checks below (green = pass, amber = tight, red = fail). The closer a strap lines up with its
+          gray center line, the tighter/more even the pitch.
         </p>
       </details>
     </div>

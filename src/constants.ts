@@ -13,5 +13,5 @@ export const DEFAULT_SETTINGS: Settings = {
   tentModel: 'stingray',
   tentSide: STINGRAY_SIDE,
   strapMax: 6,
-  tailLength: 0,
+  tailLength: 0.5,
 }

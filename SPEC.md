@@ -239,6 +239,40 @@ obstructing tree (if any) is also highlighted red with a ⚠ in the visualizatio
 Cap: **8 trees**. `C(8,3) = 56` combinations is instant client-side, and the
 pairwise-adjacent measuring burden (2 distances per extra tree) stays reasonable.
 
+## 3c. Non-equilateral tent shapes (v5)
+
+The Stingray's floor is equilateral, which is what makes the Fermat point exact:
+its corners are 120° apart, exactly matching the angle at which the Fermat point
+sees all three trees, so *any* triangle can be pointed at with zero bend. Other
+Tentsile models (e.g. the 2-person **Connect**) use an **isosceles** floor instead
+— two equal "leg" sides and a third "base" side that's shorter (4 m / 4 m / 2.56 m
+for the Connect). The tent shape is now `tentLegLength` + `tentBaseLength` in
+settings (equal for an equilateral tent — the Stingray is just that special case),
+with a model dropdown offering **Stingray**, **Connect**, or **Custom**.
+
+An isosceles tent's corners are *not* 120° apart, so there's generally no point
+from which the trees are seen at exactly its (unequal) corner angles — perfect
+zero-bend fits stop being achievable in most cases. This is physically correct
+(an asymmetric floor genuinely can't always point straight at three arbitrary
+trees), not a bug. The model still centers on the trees' Fermat point and picks
+the best-fit rotation there (unchanged from §3) rather than searching for a
+better center — asymmetric tents will more often show a small nonzero "tight"
+bend instead of a perfect 0°, which is an honest result, just not the tightest
+theoretically possible one.
+
+Because the tent's own corners are no longer interchangeable (the corner opposite
+the base is geometrically distinct from the other two), *which* tree plays which
+corner role now matters. `computeFit` tries all 6 ways to assign the 3 trees to
+the tent's 3 fixed corner roles, and keeps whichever assignment overshoots the
+fewest trees, then bends the least. For an equilateral tent all 6 give an
+identical result (nothing changes for the Stingray); for an isosceles one, only
+the 3 matching the tent's own chirality can fit well — a physical tent can be
+rotated in place but not mirrored (that would flip it upside down), so the other
+3 simply score worse and lose without needing special-casing. The winning
+assignment also determines which of the tent's own (now possibly-different) edge
+lengths feeds the §2 max-distance-per-edge rule of thumb for each tree pair,
+replacing the single shared `tentSide` constant used previously.
+
 ## 4. Inputs (final)
 
 - A grove of 3–8 trees (add/remove trees in the UI). Tree 1–2 set a baseline
@@ -333,8 +367,7 @@ A few non-obvious fixes were needed to get this right:
 - Uneven terrain / per-tree ground elevation.
 - Anti-roll strap calibration.
 - Multi-tent/hammock stacking configurations.
-- Support for other Tentsile models (UNA, Flite/Connect, Universe) — only Stingray
-  preset (4.1 m) plus a free-form custom side-length override.
+- Support for other Tentsile models beyond Stingray and Connect (UNA, Flite, Universe).
 
 ## 9. Decisions log
 

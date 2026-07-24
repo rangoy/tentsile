@@ -18,12 +18,17 @@ export interface TreeInputs {
   diameterC: number | null
 }
 
-export type TentModel = 'stingray' | 'custom'
+export type TentModel = 'stingray' | 'connect' | 'custom'
 
 export interface Settings {
   tentModel: TentModel
-  /** tent's fixed equilateral side length, in meters */
-  tentSide: number
+  /**
+   * The tent's fixed floor shape is an isosceles triangle: two equal "leg"
+   * sides and one "base" side that may be shorter (or, for an equilateral
+   * tent like the Stingray, equal to the legs). Both in meters.
+   */
+  tentLegLength: number
+  tentBaseLength: number
   /** maximum ratchet strap length, in meters */
   strapMax: number
   /** fixed tail/tether length between tent corner and ratchet buckle, in meters */

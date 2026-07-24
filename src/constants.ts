@@ -1,6 +1,8 @@
 import type { Settings, TreeEntry } from './types'
 
 export const STINGRAY_SIDE = 4.1
+export const CONNECT_LEG = 4
+export const CONNECT_BASE = 2.56
 
 export const DEFAULT_TREES: TreeEntry[] = [
   { label: '', diameter: null, distToFirst: 0, distToSecond: 0, flipSide: false },
@@ -11,7 +13,13 @@ export const DEFAULT_TREES: TreeEntry[] = [
 
 export const DEFAULT_SETTINGS: Settings = {
   tentModel: 'stingray',
-  tentSide: STINGRAY_SIDE,
+  tentLegLength: STINGRAY_SIDE,
+  tentBaseLength: STINGRAY_SIDE,
   strapMax: 6,
   tailLength: 0.5,
+}
+
+/** Settings persisted before the Connect (non-equilateral) tent shape was added lack these fields — treat as stale. */
+export function isValidSettings(value: Settings): boolean {
+  return typeof value.tentLegLength === 'number' && typeof value.tentBaseLength === 'number'
 }

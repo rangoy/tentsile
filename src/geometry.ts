@@ -156,16 +156,73 @@ function cornerPositions(center: Point, theta: number, phis: number[], radius: n
   }))
 }
 
+function evaluateCenter(center: Point, trees: Point[], phis: number[], radius: number) {
+  const theta = optimalRotation(center, trees, phis)
+  const corners = cornerPositions(center, theta, phis, radius)
+  const bends = corners.map((corner, i) => angleBetweenVectors(center, corner, corner, trees[i]))
+  const overshoot = trees.map((tree) => distance(center, tree) < radius)
+  const sumSquaredBend = bends.reduce((sum, b) => sum + b * b, 0)
+  return { center, theta, corners, bends, overshoot, sumSquaredBend }
+}
+
+type CenterCandidate = ReturnType<typeof evaluateCenter>
+
 /**
- * Places the tent's center. The Fermat point gives an exact zero-bend fit,
- * but for some triangle shapes it sits closer to one tree than the tent's
- * own circumradius — the corner would then overshoot past that tree
- * entirely, which is physically nonsensical (the strap can't pass through
- * the trunk). When that happens, this blends the center back toward the
- * triangle's centroid (a more conservative, "average" position that's less
- * prone to sitting inside the tent's own radius) just far enough to clear
- * every tree, using up to the same 7° bend tolerance the per-corner bend
- * check already allows before giving up and returning the centroid itself.
+ * Local pattern-search refinement of the tent's center, starting from
+ * `initial` (typically the Fermat-point-anchored placement `placeTent`
+ * already found). The Fermat point only guarantees zero bend at every
+ * corner when the tent's own corners are 120° apart (an equilateral tent);
+ * for any other shape it's just a reasonable starting guess, and nudging
+ * the center can noticeably reduce the worst bend (e.g. shortening an
+ * overly long "tip" strap tightens the other two straps' alignment). Never
+ * accepts a move that overshoots a tree the starting point didn't already
+ * overshoot, so it can't undo `placeTent`'s overshoot-avoidance work. A
+ * no-op for an equilateral tent at the true Fermat point: 0° bend at every
+ * corner is already the global minimum of the sum-of-squares objective, so
+ * no nearby move can improve on it.
+ */
+function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], radius: number): CenterCandidate {
+  let best = initial
+  let step = radius * 0.5
+  const MIN_STEP = radius * 1e-5
+  const directions = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ]
+  while (step > MIN_STEP) {
+    let improved = false
+    for (const dir of directions) {
+      const candidate = evaluateCenter(
+        { x: best.center.x + dir.x * step, y: best.center.y + dir.y * step },
+        trees,
+        phis,
+        radius,
+      )
+      const introducesOvershoot = candidate.overshoot.some((o, i) => o && !best.overshoot[i])
+      if (introducesOvershoot || candidate.sumSquaredBend >= best.sumSquaredBend) continue
+      best = candidate
+      improved = true
+    }
+    if (!improved) step /= 2
+  }
+  return best
+}
+
+/**
+ * Places the tent's center. The Fermat point gives an exact zero-bend fit
+ * for an equilateral tent, but for some triangle shapes it sits closer to
+ * one tree than the tent's own circumradius — the corner would then
+ * overshoot past that tree entirely, which is physically nonsensical (the
+ * strap can't pass through the trunk). When that happens, this blends the
+ * center back toward the triangle's centroid (a more conservative,
+ * "average" position that's less prone to sitting inside the tent's own
+ * radius) just far enough to clear every tree, using up to the same 7°
+ * bend tolerance the per-corner bend check already allows before giving up
+ * and falling back to the centroid itself. Either way, a final local
+ * refinement (see `refineCenter`) squeezes out any further bend reduction
+ * available for tent shapes where zero bend isn't achievable everywhere.
  */
 function placeTent(
   trees: Point[],
@@ -178,28 +235,24 @@ function placeTent(
     y: (trees[0].y + trees[1].y + trees[2].y) / 3,
   }
 
-  const evaluate = (center: Point) => {
-    const theta = optimalRotation(center, trees, phis)
-    const corners = cornerPositions(center, theta, phis, radius)
-    const bends = corners.map((corner, i) => angleBetweenVectors(center, corner, corner, trees[i]))
-    const overshoot = trees.map((tree) => distance(center, tree) < radius)
-    return { center, theta, corners, bends, overshoot }
-  }
-
   const STEPS = 24
-  let fallback = evaluate(centroid)
+  let fallback = evaluateCenter(centroid, trees, phis, radius)
+  let accepted: CenterCandidate | null = null
   for (let step = 0; step <= STEPS; step++) {
     const t = 1 - step / STEPS
-    const candidate = evaluate({
-      x: centroid.x + t * (fermat.x - centroid.x),
-      y: centroid.y + t * (fermat.y - centroid.y),
-    })
+    const candidate = evaluateCenter(
+      { x: centroid.x + t * (fermat.x - centroid.x), y: centroid.y + t * (fermat.y - centroid.y) },
+      trees,
+      phis,
+      radius,
+    )
     if (candidate.overshoot.every((o) => !o) && candidate.bends.every((b) => b <= BEND_TIGHT_MAX)) {
-      return candidate
+      accepted = candidate
+      break
     }
     fallback = candidate // keep the closest-to-centroid attempt as a last resort
   }
-  return fallback
+  return refineCenter(accepted ?? fallback, trees, phis, radius)
 }
 
 /** Angle (0-180°) between vectors (b-a) and (d-c). */
@@ -214,6 +267,68 @@ function angleBetweenVectors(a: Point, b: Point, c: Point, d: Point): number {
 function checkStatusRank(status: CheckResult['status']): number {
   return status === 'fail' ? 2 : status === 'tight' ? 1 : 0
 }
+
+/** The center of the circle passing through all three points (closed form via perpendicular bisectors). */
+function circumcenter(a: Point, b: Point, c: Point): Point {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y))
+  const aSq = a.x ** 2 + a.y ** 2
+  const bSq = b.x ** 2 + b.y ** 2
+  const cSq = c.x ** 2 + c.y ** 2
+  return {
+    x: (aSq * (b.y - c.y) + bSq * (c.y - a.y) + cSq * (a.y - b.y)) / d,
+    y: (aSq * (c.x - b.x) + bSq * (a.x - c.x) + cSq * (b.x - a.x)) / d,
+  }
+}
+
+interface TentShape {
+  valid: boolean
+  reason?: string
+  /** the tent's own 3 corners in its local frame, at 3 fixed "roles" (not tied to any tree yet) */
+  corners: [Point, Point, Point]
+  /** circumradius — the fixed center-to-corner distance, same for all 3 corners */
+  radius: number
+  /** each corner's fixed bearing from the tent's own circumcenter */
+  phis: [number, number, number]
+}
+
+/**
+ * Solves the tent's own fixed floor shape: an isosceles triangle (two equal
+ * "leg" sides, one possibly-shorter "base" side — an equilateral tent like
+ * the Stingray is just the case where base equals the legs too). Reuses
+ * `solveTriangle` on the tent's own side lengths to get its 3 corners, then
+ * finds their circumcenter to get the fixed radius/bearings that `placeTent`
+ * needs (generalizing the old hardcoded 120°-apart/`tentSide / sqrt(3)`
+ * equilateral shortcut to any triangle shape).
+ */
+function solveTentShape(settings: Settings): TentShape {
+  const { tentLegLength: leg, tentBaseLength: base } = settings
+  const shape = solveTriangle({ dAB: leg, dBC: leg, dCA: base, diameterA: null, diameterB: null, diameterC: null })
+  const corners: [Point, Point, Point] = [shape.A, shape.B, shape.C]
+  if (!shape.valid) {
+    return { valid: false, reason: shape.reason, corners, radius: 0, phis: [0, 0, 0] }
+  }
+  const center = circumcenter(corners[0], corners[1], corners[2])
+  const radius = distance(center, corners[0])
+  const phis = corners.map((c) => Math.atan2(c.y - center.y, c.x - center.x)) as [number, number, number]
+  return { valid: true, corners, radius, phis }
+}
+
+/**
+ * The 6 ways to assign the tent's 3 fixed corner roles to trees A/B/C.
+ * `PERMUTATIONS_3[k][t]` is the tent-corner-role index assigned to tree `t`.
+ * For an equilateral tent all 6 give an identical result; for an isosceles
+ * one, only the 3 matching the tent's own chirality can reach a good fit —
+ * a physical tent can be rotated in place but not mirrored (that would
+ * flip it upside down), so the other 3 simply score worse and lose.
+ */
+const PERMUTATIONS_3: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 1, 2],
+  [0, 2, 1],
+  [1, 0, 2],
+  [1, 2, 0],
+  [2, 0, 1],
+  [2, 1, 0],
+]
 
 export function computeFit(
   inputs: TreeInputs,
@@ -252,14 +367,62 @@ export function computeFit(
   const { A, B, C } = triangle
   const trees = [A, B, C]
 
-  const phis = [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3]
-  const radius = settings.tentSide / Math.sqrt(3)
+  const tentShape = solveTentShape(settings)
+  if (!tentShape.valid) {
+    checks.push({
+      id: 'tentShape',
+      label: 'Valid tent shape',
+      status: 'fail',
+      detail: tentShape.reason ?? 'Invalid tent shape.',
+      margin: -1,
+    })
+    return {
+      triangle,
+      center: { x: 0, y: 0 },
+      theta: 0,
+      cornerA: { x: 0, y: 0 },
+      cornerB: { x: 0, y: 0 },
+      cornerC: { x: 0, y: 0 },
+      strapA: 0,
+      strapB: 0,
+      strapC: 0,
+      ratchetA: 0,
+      ratchetB: 0,
+      ratchetC: 0,
+      checks,
+      overallVerdict: 'fail',
+    }
+  }
+  const { corners: tentCorners, radius, phis: basePhis } = tentShape
 
-  // Fermat point when it fits without overshooting any tree; otherwise blended
-  // back toward the centroid just far enough to clear every tree, within the
-  // same 7° bend tolerance the per-corner bend check allows (see placeTent).
-  const { center, theta, corners, overshoot } = placeTent(trees, phis, radius)
+  // Which tree plays which of the tent's 3 fixed corner roles matters once
+  // the tent isn't equilateral (see PERMUTATIONS_3) — try all 6 and keep
+  // whichever assignment overshoots the fewest trees, then bends the least
+  // (Fermat point when it fits without overshooting any tree; otherwise
+  // blended back toward the centroid just far enough to clear every tree,
+  // within the same 7° bend tolerance the per-corner bend check allows —
+  // see placeTent).
+  let best: { center: Point; theta: number; corners: Point[]; overshoot: boolean[]; perm: readonly [number, number, number]; overshootCount: number; maxBend: number } | null = null
+  for (const perm of PERMUTATIONS_3) {
+    const phis = perm.map((role) => basePhis[role])
+    const candidate = placeTent(trees, phis, radius)
+    const bends = candidate.corners.map((corner, i) => angleBetweenVectors(candidate.center, corner, corner, trees[i]))
+    const overshootCount = candidate.overshoot.filter(Boolean).length
+    const maxBend = Math.max(...bends)
+    if (!best || overshootCount < best.overshootCount || (overshootCount === best.overshootCount && maxBend < best.maxBend)) {
+      best = { ...candidate, perm, overshootCount, maxBend }
+    }
+  }
+  const { center, theta, corners, overshoot, perm } = best!
   const [cornerA, cornerB, cornerC] = corners
+
+  // The tent's own fixed edge length between the corners assigned to each
+  // pair of trees — needed for the per-edge max-distance rule of thumb below,
+  // which no longer assumes every tent edge is the same length.
+  const tentEdgeLength = (i: number, j: number) => distance(tentCorners[perm[i]], tentCorners[perm[j]])
+  const tentSideAB = tentEdgeLength(0, 1)
+  const tentSideBC = tentEdgeLength(1, 2)
+  const tentSideCA = tentEdgeLength(2, 0)
 
   const diameterA = inputs.diameterA ?? DEFAULT_TRUNK_DIAMETER
   const diameterB = inputs.diameterB ?? DEFAULT_TRUNK_DIAMETER
@@ -294,17 +457,18 @@ export function computeFit(
     label: string
     dist: number
     circumSum: number
+    tentSide: number
   }> = [
-    { id: 'edgeAB', label: `${labels.A} ↔ ${labels.B}`, dist: inputs.dAB, circumSum: circumferenceA + circumferenceB },
-    { id: 'edgeBC', label: `${labels.B} ↔ ${labels.C}`, dist: inputs.dBC, circumSum: circumferenceB + circumferenceC },
-    { id: 'edgeCA', label: `${labels.C} ↔ ${labels.A}`, dist: inputs.dCA, circumSum: circumferenceC + circumferenceA },
+    { id: 'edgeAB', label: `${labels.A} ↔ ${labels.B}`, dist: inputs.dAB, circumSum: circumferenceA + circumferenceB, tentSide: tentSideAB },
+    { id: 'edgeBC', label: `${labels.B} ↔ ${labels.C}`, dist: inputs.dBC, circumSum: circumferenceB + circumferenceC, tentSide: tentSideBC },
+    { id: 'edgeCA', label: `${labels.C} ↔ ${labels.A}`, dist: inputs.dCA, circumSum: circumferenceC + circumferenceA, tentSide: tentSideCA },
   ]
 
   for (const edge of edges) {
     // Reach without leaning on the tail's extra length, vs. the true max once
     // both corners' fixed tails are counted too (each tail adds its own length
     // to that corner's reach, since the tail is in series with the ratchet strap).
-    const maxDistNoTail = 2 * settings.strapMax + settings.tentSide - edge.circumSum
+    const maxDistNoTail = 2 * settings.strapMax + edge.tentSide - edge.circumSum
     const maxDist = maxDistNoTail + 2 * settings.tailLength
     // No hard minimum here: trees closer together are workable with a basket
     // loop (skip the tail, loop the strap directly around the trunk), which is
@@ -640,6 +804,7 @@ export function rankCombinations(
 } {
   const { positions, errors } = buildTreePositions(trees)
   const combos: ComboResult[] = []
+  const { radius: tentRadius } = solveTentShape(settings)
 
   for (const [i, j, k] of combinations3(trees.length)) {
     const pi = positions[i]
@@ -669,7 +834,7 @@ export function rankCombinations(
     const obstructionCheck = checkGroveObstructions(
       [baseFit.cornerA, baseFit.cornerB, baseFit.cornerC],
       otherTrees,
-      settings.tentSide,
+      tentRadius,
     )
     const checks = [...baseFit.checks, obstructionCheck]
     const overallVerdict = checks.reduce<CheckResult['status']>(
@@ -782,14 +947,13 @@ export function signedDistanceToTriangle(p: Point, a: Point, b: Point, c: Point)
 export function checkGroveObstructions(
   corners: [Point, Point, Point],
   otherTrees: OtherTreePoint[],
-  tentSide: number,
+  radius: number,
 ): CheckResult {
   const label = 'Other trees clear of tent'
   if (otherTrees.length === 0) {
     return { id: 'groveObstruction', label, status: 'pass', detail: 'No other grove trees to check.', margin: 1 }
   }
 
-  const radius = tentSide / Math.sqrt(3)
   const [a, b, c] = corners
   let worstClearance = Infinity
   let worstDisplay = otherTrees[0].display
@@ -802,7 +966,7 @@ export function checkGroveObstructions(
     }
   }
 
-  const margin = worstClearance / radius
+  const margin = radius > 0 ? worstClearance / radius : -1
   if (worstClearance < 0) {
     return {
       id: 'groveObstruction',

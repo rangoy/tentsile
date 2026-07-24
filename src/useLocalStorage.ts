@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react'
 
-export function useLocalStorage<T>(key: string, initialValue: T) {
+export function useLocalStorage<T>(key: string, initialValue: T, isValid?: (value: T) => boolean) {
   const [value, setValue] = useState<T>(() => {
     try {
       const stored = window.localStorage.getItem(key)
-      return stored !== null ? (JSON.parse(stored) as T) : initialValue
+      if (stored === null) return initialValue
+      const parsed = JSON.parse(stored) as T
+      if (isValid && !isValid(parsed)) {
+        window.localStorage.removeItem(key)
+        return initialValue
+      }
+      return parsed
     } catch {
+      try {
+        window.localStorage.removeItem(key)
+      } catch {
+        // ignore
+      }
       return initialValue
     }
   })

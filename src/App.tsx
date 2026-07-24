@@ -3,14 +3,14 @@ import { comboKey } from './components/ComboTabs'
 import { InputForm } from './components/InputForm'
 import { ResultsPanel } from './components/ResultsPanel'
 import { Visualization } from './components/Visualization'
-import { DEFAULT_SETTINGS, DEFAULT_TREES } from './constants'
+import { DEFAULT_SETTINGS, DEFAULT_TREES, isValidSettings } from './constants'
 import { projectOtherTrees, rankCombinations } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
 import type { Settings, TreeEntry } from './types'
 
 export default function App() {
   const [trees, setTrees] = useLocalStorage<TreeEntry[]>('tentsile.trees', DEFAULT_TREES)
-  const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS)
+  const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
   const [selectedKey, setSelectedKey] = useState('')
 
   const { combos, positionErrors, positions } = useMemo(

@@ -1,5 +1,5 @@
 import type { Settings, TreeEntry } from '../types'
-import { STINGRAY_SIDE } from '../constants'
+import { CONNECT_BASE, CONNECT_LEG, STINGRAY_SIDE } from '../constants'
 import { MAX_TREES, MIN_TREES } from '../geometry'
 import { NumberInput } from './NumberInput'
 
@@ -156,25 +156,38 @@ export function InputForm({ trees, onTreesChange, settings, onSettingsChange, po
               value={settings.tentModel}
               onChange={(e) => {
                 const tentModel = e.target.value as Settings['tentModel']
-                onSettingsChange({
-                  ...settings,
-                  tentModel,
-                  tentSide: tentModel === 'stingray' ? STINGRAY_SIDE : settings.tentSide,
-                })
+                const preset =
+                  tentModel === 'stingray'
+                    ? { tentLegLength: STINGRAY_SIDE, tentBaseLength: STINGRAY_SIDE }
+                    : tentModel === 'connect'
+                      ? { tentLegLength: CONNECT_LEG, tentBaseLength: CONNECT_BASE }
+                      : { tentLegLength: settings.tentLegLength, tentBaseLength: settings.tentBaseLength }
+                onSettingsChange({ ...settings, tentModel, ...preset })
               }}
             >
               <option value="stingray">Stingray (4.1 m)</option>
+              <option value="connect">Connect (4 / 4 / 2.56 m)</option>
               <option value="custom">Custom</option>
             </select>
           </label>
           <label>
-            Tent side length (m)
+            Tent leg length (m)
             <NumberInput
               min={0.1}
               step={0.1}
-              disabled={settings.tentModel === 'stingray'}
-              value={settings.tentSide}
-              onChange={(n) => onSettingsChange({ ...settings, tentSide: n })}
+              disabled={settings.tentModel !== 'custom'}
+              value={settings.tentLegLength}
+              onChange={(n) => onSettingsChange({ ...settings, tentLegLength: n })}
+            />
+          </label>
+          <label>
+            Tent base length (m)
+            <NumberInput
+              min={0.1}
+              step={0.1}
+              disabled={settings.tentModel !== 'custom'}
+              value={settings.tentBaseLength}
+              onChange={(n) => onSettingsChange({ ...settings, tentBaseLength: n })}
             />
           </label>
           <label>

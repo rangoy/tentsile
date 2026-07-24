@@ -82,11 +82,30 @@ v1 model:
 3. **Position the tent**: find the tree triangle's Fermat point (via Weiszfeld's
    iterative algorithm — the geometric median of the 3 tree positions, which
    coincides with the Fermat point whenever all angles are under 120°), and rotate
-   the tent so corner A's bearing from that point matches tree A's bearing.
+   the tent so corner A's bearing from that point matches tree A's bearing — see
+   "Overshoot correction (v5)" below for why this isn't always the final answer.
 4. **Bend check per corner**: the angle between the tent's center-to-corner spoke
    and the corner-to-tree strap. Expected to be ~0° for any triangle that passes
    the angle checks; flagged tight above 2° and failing above 7° (Tentsile's own
    stated tolerance) as a safety net for edge cases.
+
+**Overshoot correction (v5)**: the Fermat point gives an exact zero-bend fit, but
+for some triangle shapes it sits closer to one tree than the tent's own
+circumradius (`tentSide / √3`) — the corner would then land *beyond* that tree
+entirely, which is physically nonsensical (the strap can't pass through the
+trunk) even though the raw math still produces a small positive "reach" number
+that looks plausible in isolation. `placeTent()` checks for this and, when it
+happens, blends the center back toward the triangle's centroid (computed via
+the same rotation-optimizing closed form used before the Fermat point was
+introduced — see `optimalRotation()`) just far enough that every corner clears
+its tree, using up to the same 7° bend tolerance the per-corner bend check
+already allows. If even the full centroid can't clear every tree within that
+tolerance, it falls back to the centroid anyway and lets the existing bend
+check fail honestly with the real bend value, rather than silently reporting a
+geometrically impossible layout. A new **Tent fit** check per corner reports
+the clearance directly (or fails outright if a corner still overshoots even at
+the centroid) so this is visible in `checks`, not just inferred from the
+diagram.
 5. **Strap length per corner** ("reach") = straight-line distance from the
    positioned tent corner to its tree. Neither the tail/tether length nor trunk
    circumference is subtracted from this number — it's the raw geometric reach.
@@ -100,6 +119,7 @@ v1 model:
      — see "Tail handling" below.
    - Trunk diameter ≥ 30 cm (if entered).
    - Bend per corner, per step 4 above.
+   - Tent fit per corner (no overshoot past the tree), per "Overshoot correction" above.
 7. **Verdict**: overall pass / tight-fit-but-workable / fail, with a specific reason
    per failing constraint (e.g. "Tree A–Tree B is 9.2 m, which exceeds the 8.4 m max
    for a 6 m strap").
@@ -340,5 +360,6 @@ All open questions from the draft have been resolved:
 | Tail handling (v3) | Reach stays raw (unaffected by tail); ratchet-only length (reach − tail) is a derived, secondary figure shown in parentheses; strapMax and max-edge-distance checks apply to the tail-adjusted figures, not raw reach |
 | Basket loop (v3) | `ratchet < 0` flags `tight` (not fail) with a link to Tentsile's basket-loop guide; the flat 5 m minimum edge distance was removed since this per-corner check covers it more precisely |
 | Zoom/pan (v4) | Custom `useZoomPan` hook (not d3-zoom), full touch support via Pointer Events, constant-size labels via counter-scaling |
+| Overshoot correction (v5) | Blend center from Fermat point toward centroid, using up to the 7° bend tolerance, until no corner overshoots past its tree; new per-corner "Tent fit" check reports clearance or fails honestly if even the centroid can't clear within tolerance |
 
 Spec is considered final for the current implementation.

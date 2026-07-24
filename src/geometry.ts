@@ -125,6 +125,83 @@ function fermatPoint(trees: Point[]): Point {
   return point
 }
 
+/**
+ * The rotation (radians) of a rigid, 120°-apart tent triangle centered at
+ * `center` that minimizes total squared corner-to-tree distance. Exact
+ * closed form (see the geometry.ts history for the derivation): writing each
+ * corner as center + R*e^{i(theta+phi_i)} and v_i = center - tree_i, the sum
+ * of squared distances is minimized at theta = pi - arg(W), where
+ * W = sum_i conj(v_i) * e^{i*phi_i}. At the Fermat point specifically this
+ * reaches exactly zero (0° bend at all three corners); off that point it's
+ * merely the best available rotation, generally leaving some bend.
+ */
+function optimalRotation(center: Point, trees: Point[], phis: number[]): number {
+  let wx = 0
+  let wy = 0
+  for (let i = 0; i < trees.length; i++) {
+    const vix = center.x - trees[i].x
+    const viy = center.y - trees[i].y
+    const cosPhi = Math.cos(phis[i])
+    const sinPhi = Math.sin(phis[i])
+    wx += vix * cosPhi + viy * sinPhi
+    wy += vix * sinPhi - viy * cosPhi
+  }
+  return Math.PI - Math.atan2(wy, wx)
+}
+
+function cornerPositions(center: Point, theta: number, phis: number[], radius: number): Point[] {
+  return phis.map((phi) => ({
+    x: center.x + radius * Math.cos(theta + phi),
+    y: center.y + radius * Math.sin(theta + phi),
+  }))
+}
+
+/**
+ * Places the tent's center. The Fermat point gives an exact zero-bend fit,
+ * but for some triangle shapes it sits closer to one tree than the tent's
+ * own circumradius — the corner would then overshoot past that tree
+ * entirely, which is physically nonsensical (the strap can't pass through
+ * the trunk). When that happens, this blends the center back toward the
+ * triangle's centroid (a more conservative, "average" position that's less
+ * prone to sitting inside the tent's own radius) just far enough to clear
+ * every tree, using up to the same 7° bend tolerance the per-corner bend
+ * check already allows before giving up and returning the centroid itself.
+ */
+function placeTent(
+  trees: Point[],
+  phis: number[],
+  radius: number,
+): { center: Point; theta: number; corners: Point[]; overshoot: boolean[] } {
+  const fermat = fermatPoint(trees)
+  const centroid = {
+    x: (trees[0].x + trees[1].x + trees[2].x) / 3,
+    y: (trees[0].y + trees[1].y + trees[2].y) / 3,
+  }
+
+  const evaluate = (center: Point) => {
+    const theta = optimalRotation(center, trees, phis)
+    const corners = cornerPositions(center, theta, phis, radius)
+    const bends = corners.map((corner, i) => angleBetweenVectors(center, corner, corner, trees[i]))
+    const overshoot = trees.map((tree) => distance(center, tree) < radius)
+    return { center, theta, corners, bends, overshoot }
+  }
+
+  const STEPS = 24
+  let fallback = evaluate(centroid)
+  for (let step = 0; step <= STEPS; step++) {
+    const t = 1 - step / STEPS
+    const candidate = evaluate({
+      x: centroid.x + t * (fermat.x - centroid.x),
+      y: centroid.y + t * (fermat.y - centroid.y),
+    })
+    if (candidate.overshoot.every((o) => !o) && candidate.bends.every((b) => b <= BEND_TIGHT_MAX)) {
+      return candidate
+    }
+    fallback = candidate // keep the closest-to-centroid attempt as a last resort
+  }
+  return fallback
+}
+
 /** Angle (0-180°) between vectors (b-a) and (d-c). */
 function angleBetweenVectors(a: Point, b: Point, c: Point, d: Point): number {
   const v1 = Math.atan2(b.y - a.y, b.x - a.x)
@@ -174,29 +251,15 @@ export function computeFit(
 
   const { A, B, C } = triangle
   const trees = [A, B, C]
-  const center = fermatPoint(trees)
 
   const phis = [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3]
   const radius = settings.tentSide / Math.sqrt(3)
 
-  // Corner A is pinned to the bearing from the center to tree A. Because the
-  // center is the Fermat point, the bearings to A, B and C are automatically
-  // 120° apart, matching phis exactly — so this single rotation aligns all
-  // three corners with their trees at once.
-  const theta = Math.atan2(A.y - center.y, A.x - center.x)
-
-  const cornerA: Point = {
-    x: center.x + radius * Math.cos(theta + phis[0]),
-    y: center.y + radius * Math.sin(theta + phis[0]),
-  }
-  const cornerB: Point = {
-    x: center.x + radius * Math.cos(theta + phis[1]),
-    y: center.y + radius * Math.sin(theta + phis[1]),
-  }
-  const cornerC: Point = {
-    x: center.x + radius * Math.cos(theta + phis[2]),
-    y: center.y + radius * Math.sin(theta + phis[2]),
-  }
+  // Fermat point when it fits without overshooting any tree; otherwise blended
+  // back toward the centroid just far enough to clear every tree, within the
+  // same 7° bend tolerance the per-corner bend check allows (see placeTent).
+  const { center, theta, corners, overshoot } = placeTent(trees, phis, radius)
+  const [cornerA, cornerB, cornerC] = corners
 
   const diameterA = inputs.diameterA ?? DEFAULT_TRUNK_DIAMETER
   const diameterB = inputs.diameterB ?? DEFAULT_TRUNK_DIAMETER
@@ -432,6 +495,39 @@ export function computeFit(
         label: bend.label,
         status: 'pass',
         detail: `${angle.toFixed(1)}° off the tent's center line.`,
+        margin,
+      })
+    }
+  }
+
+  // --- Tent-fit checks (does this corner overshoot past its own tree?) ---
+  // placeTent already tries to avoid this by blending away from the Fermat
+  // point (see placeTent) — this only fires when even the centroid fallback
+  // can't clear every tree within the bend tolerance, meaning the tent is
+  // simply too big for this triangle: no valid rotation keeps every corner
+  // on the near side of its tree.
+  const fits: Array<{ id: string; label: string; treeLabel: string; tree: Point; overshoot: boolean }> = [
+    { id: 'fitA', label: `Tent fit at ${labels.A}`, treeLabel: labels.A, tree: A, overshoot: overshoot[0] },
+    { id: 'fitB', label: `Tent fit at ${labels.B}`, treeLabel: labels.B, tree: B, overshoot: overshoot[1] },
+    { id: 'fitC', label: `Tent fit at ${labels.C}`, treeLabel: labels.C, tree: C, overshoot: overshoot[2] },
+  ]
+  for (const fit of fits) {
+    const clearance = distance(center, fit.tree) - radius
+    const margin = clearance / radius
+    if (fit.overshoot) {
+      checks.push({
+        id: fit.id,
+        label: fit.label,
+        status: 'fail',
+        detail: `The tent's own size means this corner would sit beyond ${fit.treeLabel} — it doesn't fit this triangle even with the full bend tolerance.`,
+        margin,
+      })
+    } else {
+      checks.push({
+        id: fit.id,
+        label: fit.label,
+        status: 'pass',
+        detail: `${clearance.toFixed(2)} m of clearance before this corner would reach the tree.`,
         margin,
       })
     }

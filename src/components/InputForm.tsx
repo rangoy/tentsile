@@ -1,6 +1,6 @@
 import type { Settings, TreeEntry, TreeReferences } from '../types'
 import { CONNECT_BASE, CONNECT_LEG, STINGRAY_SIDE } from '../constants'
-import { formatTreeDisplay, MAX_TREES, MIN_TREES } from '../geometry'
+import { formatTreeDisplay, MAX_TREES, MIN_TREES, PERFORMANCE_WARNING_TREES } from '../geometry'
 import { NumberInput } from './NumberInput'
 
 interface Props {
@@ -19,6 +19,10 @@ function numberOrNull(raw: string): number | null {
   if (raw.trim() === '') return null
   const n = Number(raw)
   return Number.isFinite(n) ? n : null
+}
+
+function combinationCount(n: number): number {
+  return (n * (n - 1) * (n - 2)) / 6
 }
 
 export function InputForm({
@@ -196,7 +200,16 @@ export function InputForm({
       <button type="button" className="add-tree-button" onClick={addTree} disabled={trees.length >= MAX_TREES}>
         + Add another tree
       </button>
-      {trees.length >= MAX_TREES && <p className="hint">Up to {MAX_TREES} trees supported.</p>}
+      {trees.length >= MAX_TREES ? (
+        <p className="hint">Up to {MAX_TREES} trees supported.</p>
+      ) : (
+        trees.length > PERFORMANCE_WARNING_TREES && (
+          <p className="hint">
+            {trees.length} trees means checking {combinationCount(trees.length)} 3-tree combinations
+            on every edit — things may start to feel slow.
+          </p>
+        )
+      )}
 
       <details className="settings-details">
         <summary>Tent &amp; strap settings</summary>

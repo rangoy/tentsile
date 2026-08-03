@@ -22,7 +22,12 @@ export const MIN_TRUNK_DIAMETER = 0.3
 export const BEND_OK_MAX = 2
 export const BEND_TIGHT_MAX = 7
 export const MIN_TREES = 3
-export const MAX_TREES = 8
+// rankCombinations checks every 3-tree combination (n choose 3), so cost grows
+// roughly with the cube of tree count — 20 trees is ~1140 combinations, a
+// couple of seconds worst case; well beyond that a single edit starts to
+// visibly freeze the UI (see PERFORMANCE_WARNING_TREES for the earlier heads-up).
+export const MAX_TREES = 20
+export const PERFORMANCE_WARNING_TREES = 10
 
 const DEG = 180 / Math.PI
 

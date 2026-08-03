@@ -266,8 +266,13 @@ an obstructing tree is correctly ranked below/failed relative to one without,
 without the ranking or results-display code needing to know this check exists. The
 obstructing tree (if any) is also highlighted red with a ⚠ in the visualization.
 
-Cap: **8 trees**. `C(8,3) = 56` combinations is instant client-side, and the
-pairwise-adjacent measuring burden (2 distances per extra tree) stays reasonable.
+Cap: **20 trees** (raised from 8 in v10). `rankCombinations` checks every
+3-tree combination, so cost grows roughly with the cube of tree count —
+`C(20,3) = 1140` combinations is a couple of seconds worst case, which starts
+to visibly delay the UI on every edit rather than being instant. Past
+`PERFORMANCE_WARNING_TREES` (10 trees, `C(10,3) = 120`) the tree list shows a
+hint naming the current combination count so the slowdown isn't a surprise,
+without blocking further additions until the hard cap.
 
 ## 3c. Non-equilateral tent shapes (v5)
 
@@ -305,7 +310,7 @@ replacing the single shared `tentSide` constant used previously.
 
 ## 4. Inputs (final)
 
-- A grove of 3–8 trees (add/remove trees in the UI). Two trees are designated as
+- A grove of 3–20 trees (add/remove trees in the UI). Two trees are designated as
   references (default: the first two added, but any pair can be picked — see
   §3b "Choosing the reference pair"); each other tree gives distances to both
   references, plus a "flip side" toggle (see §3b). Each tree also has an optional
@@ -462,6 +467,7 @@ All open questions from the draft have been resolved:
 | Best-fit ranking (v2) | Largest safety margin (minimum per-check margin), pass > tight > fail |
 | Results display (v2) | Ranked list of top 5 combinations, selectable |
 | Tree count cap (v2) | 8 trees |
+| Tree count cap raised (v10) | 8 → 20 trees, now that `refineCenter`'s infinite-loop bug (see fix log) is gone — the remaining cost is real but bounded (~2s worst case at 20). A hint above `PERFORMANCE_WARNING_TREES` (10) names the current combination count rather than silently slowing down |
 | Mobile layout (v3) | Compact tree table, Layout card on top, collapsible checks/settings/legend |
 | Combo display (v3) | Color-coded tabs (`1/2/3` format) docked atop the Layout card, replacing the ranked list |
 | Tree identity (v3) | 1-based position is the stable identity; free-text label is optional, empty by default, shown as `number (label)` when set |

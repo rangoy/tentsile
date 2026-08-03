@@ -29,7 +29,7 @@ export function UsageGuide() {
           of every pass/tight/fail check below.
         </li>
         <li>
-          <strong>On site: use the Level check.</strong> Once you've picked a combo, measure each
+          <strong>Level check.</strong> Once you've picked a combo an started to tighten, measure each
           strap's tilt with your phone (or type it in) to get a precise tie-off height correction
           per tree.
         </li>

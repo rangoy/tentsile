@@ -292,6 +292,11 @@ main {
   margin-bottom: 1.25rem;
 }
 
+.guide-intro {
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+}
+
 .guide-list {
   margin: 0;
   padding-left: 1.25rem;

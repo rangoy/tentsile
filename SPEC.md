@@ -394,7 +394,7 @@ usually smaller-range) ratchet adjustment.
   "Measure" (reads the phone's tilt via `DeviceOrientationEvent`, holding the
   phone flat against the strap webbing, screen up, top edge toward the tree)
   or by typing the angle in directly.
-- The horizontal reach per corner is already known from the fit (`strapA/B/C`
+- The horizontal reach per corner is already known from the fit (`reachA/B/C`
   — the flat 2D plan-view distance), so each measured angle converts to an
   implied vertical drop below that tree's current tie-off point: `drop =
   reach * tan(angle)`.
@@ -411,6 +411,17 @@ usually smaller-range) ratchet adjustment.
 - This doesn't add height/3D to the core geometry model (§8 still applies to
   the fit computation itself) — it's a self-contained field-assist tool
   layered on top of the existing flat-plan strap-reach numbers.
+
+## 6c. Usage guide (v9)
+
+A collapsed-by-default "How to use this" panel sits right below the header,
+above the main grid — a short numbered walkthrough (add trees → check combo
+tabs → read the Layout → check the Result panel → use the Level check on site
+→ tune settings) for first-time users, without permanently taking up space for
+returning ones. Implemented as a `<details>` (`UsageGuide.tsx`), matching the
+existing collapsible-section pattern (checks/settings/legend) rather than a
+modal/popup — no focus-trap, backdrop, or z-index management needed, and it's
+consistent with how every other secondary panel in the app already works.
 
 ## 7. Tech stack (final)
 
@@ -461,5 +472,6 @@ All open questions from the draft have been resolved:
 | Reference pair selection (v6) | Two dropdowns pick any tree pair as references, decoupled from list order (rejected: reordering the list — would silently renumber every tree); changing the pair auto-recomputes every other tree's distances/flip-side from the previously-known geometry rather than asking for re-measurement, declining with an explanatory message if the old geometry can't support it |
 | Level check (v7) | Assume equal strap starting height on all three trees (matches recommended pitching technique) rather than asking the user to also enter each tree's attachment height — keeps the tool to a single tilt reading per corner instead of doubling the inputs; adjustment is expressed as centimeters to move the tie-off point on the trunk (correcting the eyeballed height directly), not as a ratchet strap-length change |
 | Terminology cleanup (v8) | Renamed the fixed ~0.5 m hardware from "tail/tether" to **ratchet**, and the adjustable ~6 m webbing from "ratchet strap" to **strap** (diverges from Tentsile's own "ratchet + tail" phrasing from §2, kept for in-app clarity); merged the separate "Strap to X" (too-long) and "Tail fit at X" (basket-loop) checks into one "Strap to X" check per corner, since both were really describing bounds on the same strap |
+| Usage guide (v9) | Expandable `<details>` panel (collapsed by default) rather than a modal/popup — reuses the app's existing collapsible-section pattern instead of introducing a new interaction (focus trap, backdrop, dismiss handling) for a single low-frequency use case |
 
 Spec is considered final for the current implementation.

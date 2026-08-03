@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { comboKey } from './components/ComboTabs'
 import { InputForm } from './components/InputForm'
 import { ResultsPanel } from './components/ResultsPanel'
+import { UsageGuide } from './components/UsageGuide'
 import { Visualization } from './components/Visualization'
 import { DEFAULT_REFERENCES, DEFAULT_SETTINGS, DEFAULT_TREES, isValidReferences, isValidSettings } from './constants'
 import { projectOtherTrees, rankCombinations, recomputeTreesForReferences } from './geometry'
@@ -66,6 +67,7 @@ export default function App() {
           lengths for a Tentsile-style tree tent.
         </p>
       </header>
+      <UsageGuide />
       <main>
         <div className="grid-viz">
           {selected && selectedDiameters && (

@@ -263,7 +263,8 @@ main {
 
 .checks-details summary,
 .settings-details summary,
-.legend-details summary {
+.legend-details summary,
+.guide-details summary {
   cursor: pointer;
   font-weight: 700;
   padding: 0.3rem 0;
@@ -271,7 +272,8 @@ main {
 }
 
 .checks-details summary,
-.legend-details summary {
+.legend-details summary,
+.guide-details summary {
   font-size: 0.95rem;
 }
 
@@ -281,8 +283,22 @@ main {
 
 .checks-details[open] summary,
 .settings-details[open] summary,
-.legend-details[open] summary {
+.legend-details[open] summary,
+.guide-details[open] summary {
   margin-bottom: 0.75rem;
+}
+
+.guide-details {
+  margin-bottom: 1.25rem;
+}
+
+.guide-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .legend-details {

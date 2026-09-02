@@ -1,7 +1,8 @@
 import * as d3 from 'd3'
 import { useRef, type ReactNode } from 'react'
-import type { ComboResult, CheckStatus, FitResult, OtherTreePoint, Point, TreeLabels } from '../types'
+import type { ComboResult, CheckStatus, FitResult, OtherTreePoint, Point, TreeLabels, UnitSystem } from '../types'
 import { DEFAULT_TRUNK_DIAMETER, signedDistanceToTriangle } from '../geometry'
+import { formatLength } from '../units'
 import { useZoomPan } from '../useZoomPan'
 import { ComboTabs } from './ComboTabs'
 
@@ -14,6 +15,7 @@ interface Props {
   selectedKey: string
   onSelectCombo: (key: string) => void
   ratchetLength: number
+  unitSystem: UnitSystem
 }
 
 const WIDTH = 640
@@ -53,6 +55,7 @@ export function Visualization({
   selectedKey,
   onSelectCombo,
   ratchetLength,
+  unitSystem,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
@@ -208,10 +211,10 @@ export function Visualization({
           const fraction = showRatchetSegment && reachLength > 0 ? Math.min(ratchetLength / reachLength, 1) : 0
           const split = { x: p2.x + fraction * (p1.x - p2.x), y: p2.y + fraction * (p1.y - p2.y) }
           const label = basketLoopNeeded
-            ? `${reachLength.toFixed(2)} m (basket loop)`
+            ? `${formatLength(reachLength, unitSystem)} (basket loop)`
             : ratchetLength > 0
-              ? `${reachLength.toFixed(2)} m (${strapLength.toFixed(2)} m)`
-              : `${reachLength.toFixed(2)} m`
+              ? `${formatLength(reachLength, unitSystem)} (${formatLength(strapLength, unitSystem)})`
+              : formatLength(reachLength, unitSystem)
           const labelWidth = 24 + label.length * 5.4
 
           return (

@@ -353,7 +353,20 @@ these numbers against reality. The UI shows a warning to that effect whenever
   §3b "Choosing the reference pair"); each other tree gives distances to both
   references, plus a "flip side" toggle (see §3b). Each tree also has an optional
   free-text label (empty by default — see §3b "Tree identity").
-- Tent side length: preset **Stingray = 4.1 m**, with an editable custom value.
+- Tent shape: a preset dropdown (v12) covering every real Tentsile model the
+  reference app "Tentsile Triangulator" (munifrog/tentsile) models except
+  "Universe" (its own source names it a test placeholder) and "Trilogy" (a
+  three-tent cluster, a different multi-unit layout this app doesn't
+  represent) — **Stingray**, **Vista**, **Trillium** (all 4.1 m equilateral),
+  **Trillium XL** (6.0 m equilateral), **Connect**, **Duo** (4 / 4 / 2.7 m
+  isosceles), **Flite**, **T-Mini** (3.25 / 3.25 / 2.7 m isosceles), **Una**
+  (2.9 / 2.9 / 1.6 m isosceles, and the only preset that also overrides the
+  default 6 m strap max to Una's own 4 m) — plus **Custom** for an editable
+  leg/base pair. Dimensions are sourced from the reference app's own
+  `ComposeActivity.java` constants rather than re-measured independently
+  (consistent with already leaning on that source for the isosceles hub
+  model, see §3c); this also corrects Connect's base from an earlier 2.56 m
+  to the reference app's 2.7 m for the same reason.
 - Strap max length (default 6 m, editable).
 - Ratchet length (default 0.5 m, editable).
 - Optional per-tree trunk diameter (defaults to 40 cm if left blank), used for the
@@ -361,7 +374,18 @@ these numbers against reality. The UI shows a warning to that effect whenever
   length.
 - All settings (trees, reference pair, tent side length, strap length, ratchet
   length) persisted to `localStorage` so they survive a reload.
-- Units: **metric only** (meters/centimeters), no imperial toggle.
+- Units (v12): **metric (default) or imperial**, toggled per-app (not per-field) in
+  Tent & strap settings. Every stored value stays in meters internally regardless —
+  `units.ts` converts only at the input/output boundary (see below), so switching
+  the toggle never touches saved data. Length fields show decimal feet, diameter
+  fields show decimal inches; both round to 2 decimals on display so a metric
+  value that converts to an irrational imperial figure (e.g. 4.1 m → 13.451443…​ ft)
+  doesn't fill the field with float noise. One deliberate gap: `CheckResult.detail`
+  strings (the descriptive text next to each pass/tight/fail check) are generated
+  in `geometry.ts` before any unit is chosen and stay in metric either way —
+  converting those would mean threading a display concern into the pure geometry
+  layer, so only the numeric fields (inputs and headline results: strap lengths,
+  diagram labels, level-check adjustments) are unit-aware.
 - No height/elevation inputs in v1 — flat 2D ground-plane model only.
 
 ## 5. Outputs
@@ -479,13 +503,31 @@ consistent with how every other secondary panel in the app already works.
 
 ## 8. Out of scope for v1 (final)
 
-- Imperial units.
 - 3D / height modeling (attachment height vs. tent hang height) — flat 2D only.
-- 4th "floating anchor" tree fallback scenario.
 - Uneven terrain / per-tree ground elevation.
 - Anti-roll strap calibration.
 - Multi-tent/hammock stacking configurations.
-- Support for other Tentsile models beyond Stingray and Connect (UNA, Flite, Universe).
+
+### 8a. Future expansion (considered, not yet implemented)
+
+Both ideas below come from the reference app "Tentsile Triangulator"
+(munifrog/tentsile) and are worth another look later, but are deliberately not
+attempted now:
+
+- **4th "floating anchor" tree fallback.** The reference app's FAQ
+  (`faq_fourth_tree_method_answer`) walks through using a spare ratchet/strap
+  on a 4th tree purely to redirect one corner's strap direction, not as a
+  full alternative anchor point — a genuinely different feature from this
+  app's "pick the best 3-tree combination from a larger grove" (§3b), which
+  already covers "just use a different tree" but not "bend one strap around
+  a tree that isn't part of the fit."
+- **Drag-and-drop / tap-to-edit diagram editing.** The reference app is built
+  around dragging approximate tree markers on screen (with an on-canvas
+  label you tap to fine-tune); this app is deliberately built around
+  precise tape-measure distances entered in the tree table instead (§4).
+  Adding draggable markers as an *alternative* input path — kept in sync
+  with the table, not replacing it — is plausible future work, not a gap in
+  the current model.
 
 ## 9. Decisions log
 
@@ -496,8 +538,8 @@ All open questions from the draft have been resolved:
 | Tech stack | React + D3, Vite + TypeScript |
 | Height/3D | Flat 2D only for v1 |
 | Geometry model | Centroid-centered, rotation-optimized fit (§3), as proposed |
-| Tent model scope | Stingray preset (4.1 m) + custom override, saved to localStorage |
-| Units | Metric only |
+| Tent model scope | 9 real Tentsile presets + custom override, saved to localStorage (see v12) |
+| Units | Metric or imperial, per-app toggle (see v12) |
 | Trunk input | Optional per-tree diameter field, default 40 cm |
 | Strap/ratchet settings | Editable, persisted to localStorage |
 | Deployment | Local dev only for now |
@@ -518,5 +560,6 @@ All open questions from the draft have been resolved:
 | Terminology cleanup (v8) | Renamed the fixed ~0.5 m hardware from "tail/tether" to **ratchet**, and the adjustable ~6 m webbing from "ratchet strap" to **strap** (diverges from Tentsile's own "ratchet + tail" phrasing from §2, kept for in-app clarity); merged the separate "Strap to X" (too-long) and "Tail fit at X" (basket-loop) checks into one "Strap to X" check per corner, since both were really describing bounds on the same strap |
 | Usage guide (v9) | Expandable `<details>` panel (collapsed by default) rather than a modal/popup — reuses the app's existing collapsible-section pattern instead of introducing a new interaction (focus trap, backdrop, dismiss handling) for a single low-frequency use case |
 | Isosceles hub model (v11) | Replaced the circumcenter-based hub with the reference app's ("Tentsile Triangulator", munifrog/tentsile) non-equidistant hub-angle formula (`90° + asin(base/2/leg)`, `indent=0`) — simulation showed the two models can disagree by meters of strap length for the same trees; added a UI warning for non-equal-sided tents since neither model is a verified physical measurement (see §3c) |
+| Imperial units + full preset list (v12) | Added a metric/imperial toggle (`units.ts`, display/input boundary only — every stored value stays in meters) and 7 more tent presets sourced from the reference app's own constants (§4); `CheckResult.detail` text stays metric-only rather than threading a display concern into `geometry.ts` (see §4); moved the 4th-tree and drag-and-drop-editing ideas into an explicit "future expansion" note (§8a) instead of a flat "out of scope" |
 
 Spec is considered final for the current implementation.

@@ -18,7 +18,20 @@ export interface TreeInputs {
   diameterC: number | null
 }
 
-export type TentModel = 'stingray' | 'connect' | 'custom'
+export type TentModel =
+  | 'stingray'
+  | 'vista'
+  | 'trillium'
+  | 'trillium-xl'
+  | 'connect'
+  | 'duo'
+  | 'flite'
+  | 'tmini'
+  | 'una'
+  | 'custom'
+
+/** Display/input unit only — every stored measurement stays in meters regardless (see units.ts). */
+export type UnitSystem = 'metric' | 'imperial'
 
 export interface Settings {
   tentModel: TentModel
@@ -33,6 +46,7 @@ export interface Settings {
   strapMax: number
   /** fixed ratchet length between tent corner and strap, in meters */
   ratchetLength: number
+  unitSystem: UnitSystem
 }
 
 export type CheckStatus = 'pass' | 'tight' | 'fail'

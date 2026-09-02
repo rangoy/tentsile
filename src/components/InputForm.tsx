@@ -1,6 +1,14 @@
-import type { Settings, TreeEntry, TreeReferences } from '../types'
-import { CONNECT_BASE, CONNECT_LEG, STINGRAY_SIDE } from '../constants'
+import type { Settings, TreeEntry, TreeReferences, UnitSystem } from '../types'
+import { TENT_PRESETS } from '../constants'
 import { formatTreeDisplay, MAX_TREES, MIN_TREES, PERFORMANCE_WARNING_TREES } from '../geometry'
+import {
+  cmToDisplayDiameter,
+  diameterUnitLabel,
+  displayDiameterToCm,
+  displayLengthToMeters,
+  lengthUnitLabel,
+  metersToDisplayLength,
+} from '../units'
 import { NumberInput } from './NumberInput'
 
 interface Props {
@@ -44,9 +52,16 @@ export function InputForm({
     onTreesChange([...trees, { label: '', diameter: null, distToFirst: 6, distToSecond: 6, flipSide: false }])
   }
 
+  const unit = settings.unitSystem
+  // Rounded to 2 decimals (~3 mm in imperial) so a metric value that converts to an
+  // irrational feet figure doesn't fill the field with float noise — the underlying
+  // stored value stays exact; only what's displayed back in the box is rounded.
+  const toDisplayLen = (meters: number) => Math.round(metersToDisplayLength(meters, unit) * 100) / 100
+  const fromDisplayLen = (value: number) => displayLengthToMeters(value, unit)
+
   const setDiameter = (index: number, raw: string) => {
-    const cm = numberOrNull(raw)
-    updateTree(index, { diameter: cm === null ? null : cm / 100 })
+    const displayValue = numberOrNull(raw)
+    updateTree(index, { diameter: displayValue === null ? null : displayDiameterToCm(displayValue, unit) / 100 })
   }
 
   const refALabel = formatTreeDisplay(references.a + 1, trees[references.a]?.label ?? '')
@@ -110,10 +125,10 @@ export function InputForm({
             <tr>
               <th>#</th>
               <th>Label</th>
-              <th>{`→ ${refALabel} (m)`}</th>
-              <th>{`→ ${refBLabel} (m)`}</th>
+              <th>{`→ ${refALabel} (${lengthUnitLabel(unit)})`}</th>
+              <th>{`→ ${refBLabel} (${lengthUnitLabel(unit)})`}</th>
               <th title={`On the other side of the ${refALabel}-${refBLabel} line`}>Flip</th>
-              <th>⌀ (cm)</th>
+              <th>{`⌀ (${diameterUnitLabel(unit)})`}</th>
               <th aria-hidden="true"></th>
             </tr>
           </thead>
@@ -140,8 +155,8 @@ export function InputForm({
                       <NumberInput
                         min={0}
                         step={0.1}
-                        value={tree.distToFirst}
-                        onChange={(n) => updateTree(index, { distToFirst: n })}
+                        value={toDisplayLen(tree.distToFirst)}
+                        onChange={(n) => updateTree(index, { distToFirst: fromDisplayLen(n) })}
                       />
                     )}
                   </td>
@@ -152,8 +167,8 @@ export function InputForm({
                       <NumberInput
                         min={0}
                         step={0.1}
-                        value={tree.distToSecond}
-                        onChange={(n) => updateTree(index, { distToSecond: n })}
+                        value={toDisplayLen(tree.distToSecond)}
+                        onChange={(n) => updateTree(index, { distToSecond: fromDisplayLen(n) })}
                       />
                     )}
                   </td>
@@ -173,8 +188,8 @@ export function InputForm({
                       type="number"
                       min={0}
                       step={1}
-                      placeholder="40"
-                      value={tree.diameter === null ? '' : Math.round(tree.diameter * 100)}
+                      placeholder={String(Math.round(cmToDisplayDiameter(40, unit)))}
+                      value={tree.diameter === null ? '' : Math.round(cmToDisplayDiameter(tree.diameter * 100, unit))}
                       onChange={(e) => setDiameter(index, e.target.value)}
                     />
                   </td>
@@ -215,61 +230,79 @@ export function InputForm({
         <summary>Tent &amp; strap settings</summary>
         <div className="field-grid">
           <label>
+            Units
+            <select
+              value={unit}
+              onChange={(e) => onSettingsChange({ ...settings, unitSystem: e.target.value as UnitSystem })}
+            >
+              <option value="metric">Metric (m / cm)</option>
+              <option value="imperial">Imperial (ft / in)</option>
+            </select>
+          </label>
+          <label>
             Tent model
             <select
               value={settings.tentModel}
               onChange={(e) => {
                 const tentModel = e.target.value as Settings['tentModel']
-                const preset =
-                  tentModel === 'stingray'
-                    ? { tentLegLength: STINGRAY_SIDE, tentBaseLength: STINGRAY_SIDE }
-                    : tentModel === 'connect'
-                      ? { tentLegLength: CONNECT_LEG, tentBaseLength: CONNECT_BASE }
-                      : { tentLegLength: settings.tentLegLength, tentBaseLength: settings.tentBaseLength }
-                onSettingsChange({ ...settings, tentModel, ...preset })
+                if (tentModel === 'custom') {
+                  onSettingsChange({ ...settings, tentModel })
+                  return
+                }
+                const preset = TENT_PRESETS[tentModel]
+                onSettingsChange({
+                  ...settings,
+                  tentModel,
+                  tentLegLength: preset.legLength,
+                  tentBaseLength: preset.baseLength,
+                  strapMax: preset.strapMax ?? settings.strapMax,
+                })
               }}
             >
-              <option value="stingray">Stingray (4.1 m)</option>
-              <option value="connect">Connect (4 / 4 / 2.56 m)</option>
+              {(Object.keys(TENT_PRESETS) as Array<keyof typeof TENT_PRESETS>).map((model) => (
+                <option key={model} value={model}>
+                  {TENT_PRESETS[model].label}
+                </option>
+              ))}
               <option value="custom">Custom</option>
             </select>
           </label>
           <label>
-            Tent leg length (m)
+            {`Tent leg length (${lengthUnitLabel(unit)})`}
             <NumberInput
               min={0.1}
               step={0.1}
               disabled={settings.tentModel !== 'custom'}
-              value={settings.tentLegLength}
-              onChange={(n) => onSettingsChange({ ...settings, tentLegLength: n })}
+              value={toDisplayLen(settings.tentLegLength)}
+              onChange={(n) => onSettingsChange({ ...settings, tentLegLength: fromDisplayLen(n) })}
             />
           </label>
           <label>
-            Tent base length (m)
+            {`Tent base length (${lengthUnitLabel(unit)})`}
             <NumberInput
               min={0.1}
               step={0.1}
               disabled={settings.tentModel !== 'custom'}
-              value={settings.tentBaseLength}
-              onChange={(n) => onSettingsChange({ ...settings, tentBaseLength: n })}
+              value={toDisplayLen(settings.tentBaseLength)}
+              onChange={(n) => onSettingsChange({ ...settings, tentBaseLength: fromDisplayLen(n) })}
             />
           </label>
           <label>
-            Max strap length (m)
+            {`Max strap length (${lengthUnitLabel(unit)})`}
             <NumberInput
               min={0.1}
               step={0.1}
-              value={settings.strapMax}
-              onChange={(n) => onSettingsChange({ ...settings, strapMax: n })}
+              value={toDisplayLen(settings.strapMax)}
+              onChange={(n) => onSettingsChange({ ...settings, strapMax: fromDisplayLen(n) })}
             />
           </label>
           <label>
-            Ratchet length (m)
+            {`Ratchet length (${lengthUnitLabel(unit)})`}
             <NumberInput
               min={0}
               step={0.05}
-              value={settings.ratchetLength}
-              onChange={(n) => onSettingsChange({ ...settings, ratchetLength: n })}
+              value={toDisplayLen(settings.ratchetLength)}
+              onChange={(n) => onSettingsChange({ ...settings, ratchetLength: fromDisplayLen(n) })}
             />
           </label>
         </div>

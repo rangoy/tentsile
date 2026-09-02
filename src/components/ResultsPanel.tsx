@@ -1,10 +1,12 @@
-import type { CheckResult, FitResult, TreeLabels } from '../types'
+import type { CheckResult, FitResult, TreeLabels, UnitSystem } from '../types'
+import { formatLength } from '../units'
 import { LevelCheck } from './LevelCheck'
 
 interface Props {
   fit: FitResult
   labels: TreeLabels
   ratchetLength: number
+  unitSystem: UnitSystem
 }
 
 const BASKET_LOOP_GUIDE_URL = 'https://www.tentsile.com/pages/guides-tips-tricks#closetrees'
@@ -19,14 +21,14 @@ const VERDICT_COPY: Record<FitResult['overallVerdict'], string> = {
   fail: "Won't fit as measured",
 }
 
-function formatReach(reach: number, strap: number, ratchetLength: number): string {
-  const main = `${reach.toFixed(2)} m`
+function formatReach(reach: number, strap: number, ratchetLength: number, unit: UnitSystem): string {
+  const main = formatLength(reach, unit)
   if (ratchetLength <= 0) return main
   if (strap < 0) return `${main} (basket loop)`
-  return `${main} (${strap.toFixed(2)} m)`
+  return `${main} (${formatLength(strap, unit)})`
 }
 
-export function ResultsPanel({ fit, labels, ratchetLength }: Props) {
+export function ResultsPanel({ fit, labels, ratchetLength, unitSystem }: Props) {
   const { triangle } = fit
 
   return (
@@ -46,20 +48,20 @@ export function ResultsPanel({ fit, labels, ratchetLength }: Props) {
             <tbody>
               <tr>
                 <td>{labels.A}</td>
-                <td>{formatReach(fit.reachA, fit.strapA, ratchetLength)}</td>
+                <td>{formatReach(fit.reachA, fit.strapA, ratchetLength, unitSystem)}</td>
               </tr>
               <tr>
                 <td>{labels.B}</td>
-                <td>{formatReach(fit.reachB, fit.strapB, ratchetLength)}</td>
+                <td>{formatReach(fit.reachB, fit.strapB, ratchetLength, unitSystem)}</td>
               </tr>
               <tr>
                 <td>{labels.C}</td>
-                <td>{formatReach(fit.reachC, fit.strapC, ratchetLength)}</td>
+                <td>{formatReach(fit.reachC, fit.strapC, ratchetLength, unitSystem)}</td>
               </tr>
             </tbody>
           </table>
 
-          <LevelCheck fit={fit} labels={labels} />
+          <LevelCheck fit={fit} labels={labels} unitSystem={unitSystem} />
 
           <details className="checks-details" open={fit.overallVerdict !== 'pass'}>
             <summary>Checks{issueSummary(fit)}</summary>

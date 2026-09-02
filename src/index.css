@@ -357,7 +357,7 @@ main {
 .tree-table input[type='number'],
 .tree-table input[type='text'] {
   font: inherit;
-  width: 2.8rem;
+  width: 3.6rem;
   padding: 0.3rem 0.2rem;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -383,7 +383,7 @@ main {
 
 .cell-dash {
   display: inline-block;
-  width: 2.8rem;
+  width: 3.6rem;
   text-align: center;
   opacity: 0.35;
 }

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { computeLevelAdjustments } from '../geometry'
 import { useDeviceTilt } from '../useDeviceTilt'
-import type { FitResult, LevelAngles, TreeLabels, VertexId } from '../types'
+import { formatSmallLength } from '../units'
+import type { FitResult, LevelAngles, TreeLabels, UnitSystem, VertexId } from '../types'
 
 interface Props {
   fit: FitResult
   labels: TreeLabels
+  unitSystem: UnitSystem
 }
 
 const CORNERS: VertexId[] = ['A', 'B', 'C']
@@ -17,14 +19,15 @@ function numberOrNull(raw: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function formatAdjustment(mountAdjustM: number | null): string {
+function formatAdjustment(mountAdjustM: number | null, unit: UnitSystem): string {
   if (mountAdjustM === null) return '—'
   const cm = Math.abs(mountAdjustM) * 100
   if (cm < LEVEL_TOLERANCE_CM) return 'Level'
-  return mountAdjustM > 0 ? `Raise mount ~${cm.toFixed(0)} cm` : `Lower mount ~${cm.toFixed(0)} cm`
+  const magnitude = formatSmallLength(Math.abs(mountAdjustM), unit)
+  return mountAdjustM > 0 ? `Raise mount ~${magnitude}` : `Lower mount ~${magnitude}`
 }
 
-export function LevelCheck({ fit, labels }: Props) {
+export function LevelCheck({ fit, labels, unitSystem }: Props) {
   const [angles, setAngles] = useState<LevelAngles>({ A: null, B: null, C: null })
   const [measuring, setMeasuring] = useState<VertexId | null>(null)
   const { supported, permission, beta, enable } = useDeviceTilt()
@@ -111,7 +114,7 @@ export function LevelCheck({ fit, labels }: Props) {
                   )
                 )}
               </td>
-              <td>{formatAdjustment(adjustments[corner].mountAdjustM)}</td>
+              <td>{formatAdjustment(adjustments[corner].mountAdjustM, unitSystem)}</td>
             </tr>
           ))}
         </tbody>

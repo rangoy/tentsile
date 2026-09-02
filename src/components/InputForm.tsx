@@ -273,6 +273,14 @@ export function InputForm({
             />
           </label>
         </div>
+        {settings.tentLegLength !== settings.tentBaseLength && (
+          <p className="warning">
+            Non-equal-sided tent: the corner positions below are an approximation, not an exact
+            fit — and unlike the Stingray, this app's author hasn't personally tested a
+            non-equal-sided tent against these numbers. Use the sight-indicator tabs on the sides
+            of the real tent/hammock to fine-tune alignment once pitched.
+          </p>
+        )}
       </details>
     </div>
   )

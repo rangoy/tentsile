@@ -158,18 +158,18 @@ function optimalRotation(center: Point, trees: Point[], phis: number[]): number 
   return Math.PI - Math.atan2(wy, wx)
 }
 
-function cornerPositions(center: Point, theta: number, phis: number[], radius: number): Point[] {
-  return phis.map((phi) => ({
-    x: center.x + radius * Math.cos(theta + phi),
-    y: center.y + radius * Math.sin(theta + phi),
+function cornerPositions(center: Point, theta: number, phis: number[], radii: number[]): Point[] {
+  return phis.map((phi, i) => ({
+    x: center.x + radii[i] * Math.cos(theta + phi),
+    y: center.y + radii[i] * Math.sin(theta + phi),
   }))
 }
 
-function evaluateCenter(center: Point, trees: Point[], phis: number[], radius: number) {
+function evaluateCenter(center: Point, trees: Point[], phis: number[], radii: number[]) {
   const theta = optimalRotation(center, trees, phis)
-  const corners = cornerPositions(center, theta, phis, radius)
+  const corners = cornerPositions(center, theta, phis, radii)
   const bends = corners.map((corner, i) => angleBetweenVectors(center, corner, corner, trees[i]))
-  const overshoot = trees.map((tree) => distance(center, tree) < radius)
+  const overshoot = trees.map((tree, i) => distance(center, tree) < radii[i])
   const sumSquaredBend = bends.reduce((sum, b) => sum + b * b, 0)
   return { center, theta, corners, bends, overshoot, sumSquaredBend }
 }
@@ -190,10 +190,11 @@ type CenterCandidate = ReturnType<typeof evaluateCenter>
  * corner is already the global minimum of the sum-of-squares objective, so
  * no nearby move can improve on it.
  */
-function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], radius: number): CenterCandidate {
+function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], radii: number[]): CenterCandidate {
   let best = initial
-  let step = radius * 0.5
-  const MIN_STEP = radius * 1e-5
+  const avgRadius = radii.reduce((sum, r) => sum + r, 0) / radii.length
+  let step = avgRadius * 0.5
+  const MIN_STEP = avgRadius * 1e-5
   // Guards against near-duplicate/degenerate tree positions, where floating-point
   // noise in sumSquaredBend can otherwise look like an "improvement" every round
   // forever — without this, `step` never shrinks and the loop below never exits.
@@ -214,7 +215,7 @@ function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], 
         { x: best.center.x + dir.x * step, y: best.center.y + dir.y * step },
         trees,
         phis,
-        radius,
+        radii,
       )
       const introducesOvershoot = candidate.overshoot.some((o, i) => o && !best.overshoot[i])
       if (introducesOvershoot || candidate.sumSquaredBend >= best.sumSquaredBend - MIN_IMPROVEMENT) continue
@@ -229,10 +230,10 @@ function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], 
 /**
  * Places the tent's center. The Fermat point gives an exact zero-bend fit
  * for an equilateral tent, but for some triangle shapes it sits closer to
- * one tree than the tent's own circumradius — the corner would then
- * overshoot past that tree entirely, which is physically nonsensical (the
- * strap can't pass through the trunk). When that happens, this blends the
- * center back toward the triangle's centroid (a more conservative,
+ * one tree than that corner's own hub-to-corner radius — the corner would
+ * then overshoot past that tree entirely, which is physically nonsensical
+ * (the strap can't pass through the trunk). When that happens, this blends
+ * the center back toward the triangle's centroid (a more conservative,
  * "average" position that's less prone to sitting inside the tent's own
  * radius) just far enough to clear every tree, using up to the same 7°
  * bend tolerance the per-corner bend check already allows before giving up
@@ -243,7 +244,7 @@ function refineCenter(initial: CenterCandidate, trees: Point[], phis: number[], 
 function placeTent(
   trees: Point[],
   phis: number[],
-  radius: number,
+  radii: number[],
 ): { center: Point; theta: number; corners: Point[]; overshoot: boolean[] } {
   const fermat = fermatPoint(trees)
   const centroid = {
@@ -252,7 +253,7 @@ function placeTent(
   }
 
   const STEPS = 24
-  let fallback = evaluateCenter(centroid, trees, phis, radius)
+  let fallback = evaluateCenter(centroid, trees, phis, radii)
   let accepted: CenterCandidate | null = null
   for (let step = 0; step <= STEPS; step++) {
     const t = 1 - step / STEPS
@@ -260,7 +261,7 @@ function placeTent(
       { x: centroid.x + t * (fermat.x - centroid.x), y: centroid.y + t * (fermat.y - centroid.y) },
       trees,
       phis,
-      radius,
+      radii,
     )
     if (candidate.overshoot.every((o) => !o) && candidate.bends.every((b) => b <= BEND_TIGHT_MAX)) {
       accepted = candidate
@@ -268,7 +269,7 @@ function placeTent(
     }
     fallback = candidate // keep the closest-to-centroid attempt as a last resort
   }
-  return refineCenter(accepted ?? fallback, trees, phis, radius)
+  return refineCenter(accepted ?? fallback, trees, phis, radii)
 }
 
 /** Angle (0-180°) between vectors (b-a) and (d-c). */
@@ -284,49 +285,85 @@ function checkStatusRank(status: CheckResult['status']): number {
   return status === 'fail' ? 2 : status === 'tight' ? 1 : 0
 }
 
-/** The center of the circle passing through all three points (closed form via perpendicular bisectors). */
-function circumcenter(a: Point, b: Point, c: Point): Point {
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y))
-  const aSq = a.x ** 2 + a.y ** 2
-  const bSq = b.x ** 2 + b.y ** 2
-  const cSq = c.x ** 2 + c.y ** 2
-  return {
-    x: (aSq * (b.y - c.y) + bSq * (c.y - a.y) + cSq * (a.y - b.y)) / d,
-    y: (aSq * (c.x - b.x) + bSq * (a.x - c.x) + cSq * (b.x - a.x)) / d,
-  }
-}
-
 interface TentShape {
   valid: boolean
   reason?: string
-  /** the tent's own 3 corners in its local frame, at 3 fixed "roles" (not tied to any tree yet) */
+  /** the tent's own 3 corners in its local frame, at 3 fixed "roles" (not tied to any tree yet); index 0 is the tip (opposite the base), 1 and 2 are the two base corners */
   corners: [Point, Point, Point]
-  /** circumradius — the fixed center-to-corner distance, same for all 3 corners */
-  radius: number
-  /** each corner's fixed bearing from the tent's own circumcenter */
+  /** each corner's fixed hub-to-corner distance — generally *not* equal across corners for an isosceles tent (see solveTentShape) */
+  radii: [number, number, number]
+  /** each corner's fixed bearing from the hub */
   phis: [number, number, number]
 }
 
 /**
  * Solves the tent's own fixed floor shape: an isosceles triangle (two equal
  * "leg" sides, one possibly-shorter "base" side — an equilateral tent like
- * the Stingray is just the case where base equals the legs too). Reuses
- * `solveTriangle` on the tent's own side lengths to get its 3 corners, then
- * finds their circumcenter to get the fixed radius/bearings that `placeTent`
- * needs (generalizing the old hardcoded 120°-apart/`tentSide / sqrt(3)`
- * equilateral shortcut to any triangle shape).
+ * the Stingray is just the case where base equals the legs too), and the
+ * fixed "hub" point the tent's own underfloor straps converge on (the point
+ * `placeTent` aims to point straight at all three trees for zero bend).
+ *
+ * An earlier version of this function placed the hub at the tent triangle's
+ * *circumcenter* (equidistant from all 3 corners) — a convenient
+ * generalization of the Stingray's 120°-apart corners, but not one grounded
+ * in how a real isosceles Tentsile platform (e.g. the Connect) is actually
+ * built. Cross-checking against the independently-developed reference app
+ * "Tentsile Triangulator" (https://github.com/munifrog/tentsile) found it
+ * uses a different, non-equidistant hub for every real isosceles product it
+ * models (Connect, Duo, Flite, T-Mini, Una — see
+ * `android/app/src/full/java/.../ComposeActivity.java`): the hub angle comes
+ * from `Util.getSmallAngleGivenIndent(leg, base, indent=0)` in
+ * `android/app/src/main/java/.../Util.java`, i.e.
+ * `tetherAngle = 90° + asin(base / (2 * leg))` — not from equal corner
+ * distances. Simulating both hub models against the same tree triangles
+ * showed they can disagree by *meters* of computed strap length for a
+ * genuinely isosceles tent (and even disagree on which tree should take the
+ * tip corner), so this now follows the reference app's formula instead.
+ *
+ * Neither model is a verified physical measurement, though — the reference
+ * app's own FAQ (`faq_sight_indicator_answer` in
+ * `android/app/src/main/res/values/strings.xml`) says as much: for
+ * "non-equal-sided tents and hammocks" it only "tries to get you close" to
+ * the right spot, with final alignment meant to come from the physical
+ * sight-indicator tabs sewn onto the real product's sides. This app has no
+ * such tabs to render, so an isosceles tent's numbers should be read the
+ * same way: a close starting point, not an exact one — and unlike the
+ * Stingray (cross-checked against a real worked example, see computeFit),
+ * this app's author has not personally tested a non-equal-sided tent against
+ * these numbers (see the UI warning shown whenever leg ≠ base).
+ *
+ * Degenerates cleanly to the old equilateral case when leg === base: gamma =
+ * asin(0.5) = 30°, so tetherAngle = 120° and, by symmetry, all 3 radii come
+ * out equal — nothing changes for the Stingray.
  */
 function solveTentShape(settings: Settings): TentShape {
   const { tentLegLength: leg, tentBaseLength: base } = settings
   const shape = solveTriangle({ dAB: leg, dBC: leg, dCA: base, diameterA: null, diameterB: null, diameterC: null })
-  const corners: [Point, Point, Point] = [shape.A, shape.B, shape.C]
   if (!shape.valid) {
-    return { valid: false, reason: shape.reason, corners, radius: 0, phis: [0, 0, 0] }
+    return { valid: false, reason: shape.reason, corners: [shape.A, shape.B, shape.C], radii: [0, 0, 0], phis: [0, 0, 0] }
   }
-  const center = circumcenter(corners[0], corners[1], corners[2])
-  const radius = distance(center, corners[0])
-  const phis = corners.map((c) => Math.atan2(c.y - center.y, c.x - center.x)) as [number, number, number]
-  return { valid: true, corners, radius, phis }
+
+  const gamma = Math.asin(base / (2 * leg))
+  const tetherAngle = Math.PI / 2 + gamma
+  const largeAngle = (2 * Math.PI - tetherAngle) / 2
+  const centerHeight = Math.sqrt(leg ** 2 - (base / 2) ** 2)
+  const baseHalf = base / 2
+  const baseTether = baseHalf / Math.sin(largeAngle) // hub-to-corner distance for each of the 2 base corners
+  const baseCenterOffset = Math.sqrt(baseTether ** 2 - baseHalf ** 2)
+  const tipTether = centerHeight - baseCenterOffset // hub-to-corner distance for the tip
+
+  const corners: [Point, Point, Point] = [
+    { x: tipTether, y: 0 },
+    { x: -baseCenterOffset, y: baseHalf },
+    { x: -baseCenterOffset, y: -baseHalf },
+  ]
+  const radii: [number, number, number] = [tipTether, baseTether, baseTether]
+  const phis: [number, number, number] = [
+    0,
+    Math.atan2(baseHalf, -baseCenterOffset),
+    Math.atan2(-baseHalf, -baseCenterOffset),
+  ]
+  return { valid: true, corners, radii, phis }
 }
 
 /**
@@ -409,7 +446,7 @@ export function computeFit(
       overallVerdict: 'fail',
     }
   }
-  const { corners: tentCorners, radius, phis: basePhis } = tentShape
+  const { corners: tentCorners, radii: baseRadii, phis: basePhis } = tentShape
 
   // Which tree plays which of the tent's 3 fixed corner roles matters once
   // the tent isn't equilateral (see PERMUTATIONS_3) — try all 6 and keep
@@ -418,18 +455,19 @@ export function computeFit(
   // blended back toward the centroid just far enough to clear every tree,
   // within the same 7° bend tolerance the per-corner bend check allows —
   // see placeTent).
-  let best: { center: Point; theta: number; corners: Point[]; overshoot: boolean[]; perm: readonly [number, number, number]; overshootCount: number; maxBend: number } | null = null
+  let best: { center: Point; theta: number; corners: Point[]; overshoot: boolean[]; perm: readonly [number, number, number]; radii: number[]; overshootCount: number; maxBend: number } | null = null
   for (const perm of PERMUTATIONS_3) {
     const phis = perm.map((role) => basePhis[role])
-    const candidate = placeTent(trees, phis, radius)
+    const radii = perm.map((role) => baseRadii[role])
+    const candidate = placeTent(trees, phis, radii)
     const bends = candidate.corners.map((corner, i) => angleBetweenVectors(candidate.center, corner, corner, trees[i]))
     const overshootCount = candidate.overshoot.filter(Boolean).length
     const maxBend = Math.max(...bends)
     if (!best || overshootCount < best.overshootCount || (overshootCount === best.overshootCount && maxBend < best.maxBend)) {
-      best = { ...candidate, perm, overshootCount, maxBend }
+      best = { ...candidate, perm, radii, overshootCount, maxBend }
     }
   }
-  const { center, theta, corners, overshoot, perm } = best!
+  const { center, theta, corners, overshoot, perm, radii: cornerRadii } = best!
   const [cornerA, cornerB, cornerC] = corners
 
   // The tent's own fixed edge length between the corners assigned to each
@@ -679,9 +717,9 @@ export function computeFit(
     { id: 'fitB', label: `Tent fit at ${labels.B}`, treeLabel: labels.B, tree: B, overshoot: overshoot[1] },
     { id: 'fitC', label: `Tent fit at ${labels.C}`, treeLabel: labels.C, tree: C, overshoot: overshoot[2] },
   ]
-  for (const fit of fits) {
-    const clearance = distance(center, fit.tree) - radius
-    const margin = clearance / radius
+  for (const [i, fit] of fits.entries()) {
+    const clearance = distance(center, fit.tree) - cornerRadii[i]
+    const margin = clearance / cornerRadii[i]
     if (fit.overshoot) {
       checks.push({
         id: fit.id,
@@ -892,7 +930,10 @@ export function rankCombinations(
 } {
   const { positions, errors } = buildTreePositions(trees, refA, refB)
   const combos: ComboResult[] = []
-  const { radius: tentRadius } = solveTentShape(settings)
+  // Only used to scale the grove-obstruction margin below, so an average across
+  // the (possibly unequal, for an isosceles tent) 3 corner radii is fine here.
+  const { radii: tentRadii } = solveTentShape(settings)
+  const tentRadius = tentRadii.reduce((sum, r) => sum + r, 0) / tentRadii.length
 
   for (const [i, j, k] of combinations3(trees.length)) {
     const pi = positions[i]

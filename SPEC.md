@@ -274,7 +274,7 @@ to visibly delay the UI on every edit rather than being instant. Past
 hint naming the current combination count so the slowdown isn't a surprise,
 without blocking further additions until the hard cap.
 
-## 3c. Non-equilateral tent shapes (v5)
+## 3c. Non-equilateral tent shapes (v5, hub model corrected v11)
 
 The Stingray's floor is equilateral, which is what makes the Fermat point exact:
 its corners are 120° apart, exactly matching the angle at which the Fermat point
@@ -289,11 +289,11 @@ An isosceles tent's corners are *not* 120° apart, so there's generally no point
 from which the trees are seen at exactly its (unequal) corner angles — perfect
 zero-bend fits stop being achievable in most cases. This is physically correct
 (an asymmetric floor genuinely can't always point straight at three arbitrary
-trees), not a bug. The model still centers on the trees' Fermat point and picks
-the best-fit rotation there (unchanged from §3) rather than searching for a
-better center — asymmetric tents will more often show a small nonzero "tight"
-bend instead of a perfect 0°, which is an honest result, just not the tightest
-theoretically possible one.
+trees), not a bug. `placeTent` still centers on (a blend toward, when needed,
+away from) the trees' Fermat point and picks the best-fit rotation there —
+asymmetric tents will more often show a small nonzero "tight" bend instead of a
+perfect 0°, which is an honest result, just not the tightest theoretically
+possible one.
 
 Because the tent's own corners are no longer interchangeable (the corner opposite
 the base is geometrically distinct from the other two), *which* tree plays which
@@ -307,6 +307,44 @@ rotated in place but not mirrored (that would flip it upside down), so the other
 assignment also determines which of the tent's own (now possibly-different) edge
 lengths feeds the §2 max-distance-per-edge rule of thumb for each tree pair,
 replacing the single shared `tentSide` constant used previously.
+
+**Isosceles hub model (v11)**: `placeTent`'s "point every corner straight at its
+tree" target requires a fixed reference point on the tent — a "hub" — with a
+known bearing (and, once corners can be unequal distances apart, a known
+distance) from that hub to each corner. An earlier version placed the hub at the
+tent triangle's *circumcenter* (equidistant from all 3 corners), a convenient
+generalization of the Stingray's 120°-apart corners that required no extra
+parameter. But it wasn't grounded in how a real isosceles Tentsile platform is
+actually built, and simulating it against real Connect-sized trees showed it can
+diverge from the alternative below by **meters** of computed strap length for
+the same trees — enough to flip which tree the tool recommends for the tip
+corner, not just a rounding difference.
+
+The independently-developed reference app **"Tentsile Triangulator"**
+(https://github.com/munifrog/tentsile — already the source of the §3 Fermat-point
+cross-check) takes a different approach for every real isosceles product it
+models (Connect, Duo, Flite, T-Mini, Una): a **non-equidistant** hub, with the
+angle derived from `Util.getSmallAngleGivenIndent(leg, base, indent=0)` in
+`android/app/src/main/java/.../Util.java` — i.e.
+`tetherAngle = 90° + asin(base / (2·leg))` — rather than from equal corner
+distances. This app now follows that same formula (`solveTentShape` in
+`src/geometry.ts`), so an isosceles fit here matches the one shipped, reviewed
+app that's already been cross-checked for the equilateral case. It degrades
+cleanly to the old equilateral case when `leg === base` (120°, equal radii —
+nothing changes for the Stingray).
+
+Neither hub model is a verified physical measurement, though. The reference
+app's own FAQ (`faq_sight_indicator_answer` in
+`android/app/src/main/res/values/strings.xml`) says outright that for
+"non-equal-sided tents and hammocks" it only "tries to get you close" to the
+right spot, with final precision meant to come from the **sight-indicator
+tabs** sewn onto the real product's sides — a physical alignment aid this app
+has no way to render. So an isosceles tent's numbers here should be read the
+same way: a close starting point for pitching, not an exact one — and unlike
+the Stingray case (cross-checked against a real worked example in §3), this
+app's author has not personally pitched a non-equal-sided tent to confirm
+these numbers against reality. The UI shows a warning to that effect whenever
+`tentLegLength !== tentBaseLength`.
 
 ## 4. Inputs (final)
 
@@ -479,5 +517,6 @@ All open questions from the draft have been resolved:
 | Level check (v7) | Assume equal strap starting height on all three trees (matches recommended pitching technique) rather than asking the user to also enter each tree's attachment height — keeps the tool to a single tilt reading per corner instead of doubling the inputs; adjustment is expressed as centimeters to move the tie-off point on the trunk (correcting the eyeballed height directly), not as a ratchet strap-length change |
 | Terminology cleanup (v8) | Renamed the fixed ~0.5 m hardware from "tail/tether" to **ratchet**, and the adjustable ~6 m webbing from "ratchet strap" to **strap** (diverges from Tentsile's own "ratchet + tail" phrasing from §2, kept for in-app clarity); merged the separate "Strap to X" (too-long) and "Tail fit at X" (basket-loop) checks into one "Strap to X" check per corner, since both were really describing bounds on the same strap |
 | Usage guide (v9) | Expandable `<details>` panel (collapsed by default) rather than a modal/popup — reuses the app's existing collapsible-section pattern instead of introducing a new interaction (focus trap, backdrop, dismiss handling) for a single low-frequency use case |
+| Isosceles hub model (v11) | Replaced the circumcenter-based hub with the reference app's ("Tentsile Triangulator", munifrog/tentsile) non-equidistant hub-angle formula (`90° + asin(base/2/leg)`, `indent=0`) — simulation showed the two models can disagree by meters of strap length for the same trees; added a UI warning for non-equal-sided tents since neither model is a verified physical measurement (see §3c) |
 
 Spec is considered final for the current implementation.

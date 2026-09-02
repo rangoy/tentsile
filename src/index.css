@@ -149,6 +149,16 @@ main {
   margin-top: 0.1rem;
 }
 
+.warning {
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border-left: 4px solid #d98e04;
+  background: rgba(217, 142, 4, 0.1);
+  color: #a06c03;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

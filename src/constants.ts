@@ -4,12 +4,12 @@ export const STINGRAY_SIDE = 4.1
 
 /**
  * Product dimensions (leg/leg/base, meters) and the isosceles-only strapMax
- * override sourced from the reference app "Tentsile Triangulator"
+ * override sourced from Tentsile Triangulator
  * (https://github.com/munifrog/tentsile,
  * `android/app/src/full/java/.../ComposeActivity.java`) rather than
  * re-measured independently — see the "Isosceles hub model" note in
  * geometry.ts for why this app already leans on that source for isosceles
- * math. Two products the reference app also models are deliberately left
+ * math. Two products Tentsile Triangulator also models are deliberately left
  * out: "Universe" (its own source names it `tentsile_test_universe` — a test
  * placeholder, not a shipped product) and "Trilogy" (three equilateral tents
  * clustered around a shared point — a different multi-unit layout this app's

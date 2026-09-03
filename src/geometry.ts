@@ -2,6 +2,7 @@ import type {
   CheckResult,
   ComboResult,
   FitResult,
+  FloatingAnchorResult,
   LevelAdjustment,
   LevelAdjustments,
   LevelAngles,
@@ -28,6 +29,8 @@ export const MIN_TREES = 3
 // visibly freeze the UI (see PERFORMANCE_WARNING_TREES for the earlier heads-up).
 export const MAX_TREES = 20
 export const PERFORMANCE_WARNING_TREES = 10
+/** Golden-section search iterations for solveRedirectLoop — 60 halves the search bracket enough to converge to well under a micrometer. */
+const LOOP_SEARCH_ITERATIONS = 60
 
 const DEG = 180 / Math.PI
 
@@ -285,6 +288,74 @@ function checkStatusRank(status: CheckResult['status']): number {
   return status === 'fail' ? 2 : status === 'tight' ? 1 : 0
 }
 
+/**
+ * Shared with computeFloatingAnchor, which needs the exact same strap-length
+ * rule for the redirected corner's own two segments (see there) as
+ * computeFit already applies to a normal corner — same thresholds, same
+ * wording, one source of truth.
+ */
+function strapCheck(id: string, label: string, reach: number, strap: number, settings: Settings): CheckResult {
+  const marginVsMax = (settings.strapMax - strap) / settings.strapMax
+  const marginVsRatchet = settings.ratchetLength > 0 ? strap / settings.ratchetLength : Infinity
+  const margin = Math.min(marginVsMax, marginVsRatchet)
+  if (strap > settings.strapMax) {
+    return {
+      id,
+      label,
+      status: 'fail',
+      detail:
+        settings.ratchetLength > 0
+          ? `${strap.toFixed(2)} m of strap needed (after the ${settings.ratchetLength.toFixed(2)} m ratchet), longer than your ${settings.strapMax.toFixed(1)} m strap.`
+          : `${reach.toFixed(2)} m needed, longer than your ${settings.strapMax.toFixed(1)} m strap.`,
+      margin,
+    }
+  }
+  if (settings.ratchetLength > 0 && strap < 0) {
+    return {
+      id,
+      label,
+      status: 'tight',
+      detail: `Tree is closer than the ${settings.ratchetLength.toFixed(2)} m ratchet — use a basket loop (loop the strap directly around the tree, skipping the ratchet) instead.`,
+      margin,
+    }
+  }
+  return {
+    id,
+    label,
+    status: 'pass',
+    detail:
+      settings.ratchetLength > 0
+        ? `${strap.toFixed(2)} m of strap needed (${reach.toFixed(2)} m total reach).`
+        : `${reach.toFixed(2)} m needed.`,
+    margin,
+  }
+}
+
+/** Shared with computeFloatingAnchor — see strapCheck. */
+function bendCheck(id: string, label: string, center: Point, corner: Point, tree: Point): CheckResult {
+  const angle = angleBetweenVectors(center, corner, corner, tree)
+  const margin = 1 - angle / BEND_TIGHT_MAX
+  if (angle > BEND_TIGHT_MAX) {
+    return {
+      id,
+      label,
+      status: 'fail',
+      detail: `${angle.toFixed(1)}° off the tent's center line — beyond the ~7° of built-in strap tolerance.`,
+      margin,
+    }
+  }
+  if (angle > BEND_OK_MAX) {
+    return {
+      id,
+      label,
+      status: 'tight',
+      detail: `${angle.toFixed(1)}° off the tent's center line — within the ~7° of built-in strap tolerance.`,
+      margin,
+    }
+  }
+  return { id, label, status: 'pass', detail: `${angle.toFixed(1)}° off the tent's center line.`, margin }
+}
+
 interface TentShape {
   valid: boolean
   reason?: string
@@ -307,10 +378,10 @@ interface TentShape {
  * *circumcenter* (equidistant from all 3 corners) — a convenient
  * generalization of the Stingray's 120°-apart corners, but not one grounded
  * in how a real isosceles Tentsile platform (e.g. the Connect) is actually
- * built. Cross-checking against the independently-developed reference app
- * "Tentsile Triangulator" (https://github.com/munifrog/tentsile) found it
- * uses a different, non-equidistant hub for every real isosceles product it
- * models (Connect, Duo, Flite, T-Mini, Una — see
+ * built. Cross-checking against the independently-developed app "Tentsile
+ * Triangulator" (https://github.com/munifrog/tentsile) found it uses a
+ * different, non-equidistant hub for every real isosceles product it models
+ * (Connect, Duo, Flite, T-Mini, Una — see
  * `android/app/src/full/java/.../ComposeActivity.java`): the hub angle comes
  * from `Util.getSmallAngleGivenIndent(leg, base, indent=0)` in
  * `android/app/src/main/java/.../Util.java`, i.e.
@@ -318,10 +389,10 @@ interface TentShape {
  * distances. Simulating both hub models against the same tree triangles
  * showed they can disagree by *meters* of computed strap length for a
  * genuinely isosceles tent (and even disagree on which tree should take the
- * tip corner), so this now follows the reference app's formula instead.
+ * tip corner), so this now follows Tentsile Triangulator's formula instead.
  *
- * Neither model is a verified physical measurement, though — the reference
- * app's own FAQ (`faq_sight_indicator_answer` in
+ * Neither model is a verified physical measurement, though — Tentsile
+ * Triangulator's own FAQ (`faq_sight_indicator_answer` in
  * `android/app/src/main/res/values/strings.xml`) says as much: for
  * "non-equal-sided tents and hammocks" it only "tries to get you close" to
  * the right spot, with final alignment meant to come from the physical
@@ -634,40 +705,7 @@ export function computeFit(
     { id: 'strapC', label: `Strap to ${labels.C}`, reach: reachC, strap: strapC },
   ]
   for (const strap of straps) {
-    const marginVsMax = (settings.strapMax - strap.strap) / settings.strapMax
-    const marginVsRatchet = settings.ratchetLength > 0 ? strap.strap / settings.ratchetLength : Infinity
-    const margin = Math.min(marginVsMax, marginVsRatchet)
-    if (strap.strap > settings.strapMax) {
-      checks.push({
-        id: strap.id,
-        label: strap.label,
-        status: 'fail',
-        detail:
-          settings.ratchetLength > 0
-            ? `${strap.strap.toFixed(2)} m of strap needed (after the ${settings.ratchetLength.toFixed(2)} m ratchet), longer than your ${settings.strapMax.toFixed(1)} m strap.`
-            : `${strap.reach.toFixed(2)} m needed, longer than your ${settings.strapMax.toFixed(1)} m strap.`,
-        margin,
-      })
-    } else if (settings.ratchetLength > 0 && strap.strap < 0) {
-      checks.push({
-        id: strap.id,
-        label: strap.label,
-        status: 'tight',
-        detail: `Tree is closer than the ${settings.ratchetLength.toFixed(2)} m ratchet — use a basket loop (loop the strap directly around the tree, skipping the ratchet) instead.`,
-        margin,
-      })
-    } else {
-      checks.push({
-        id: strap.id,
-        label: strap.label,
-        status: 'pass',
-        detail:
-          settings.ratchetLength > 0
-            ? `${strap.strap.toFixed(2)} m of strap needed (${strap.reach.toFixed(2)} m total reach).`
-            : `${strap.reach.toFixed(2)} m needed.`,
-        margin,
-      })
-    }
+    checks.push(strapCheck(strap.id, strap.label, strap.reach, strap.strap, settings))
   }
 
   // --- Bend checks (deviation of each strap from its center-to-corner spoke) ---
@@ -677,33 +715,7 @@ export function computeFit(
     { id: 'bendC', label: `Strap bend at ${labels.C}`, corner: cornerC, tree: C },
   ]
   for (const bend of bends) {
-    const angle = angleBetweenVectors(center, bend.corner, bend.corner, bend.tree)
-    const margin = 1 - angle / BEND_TIGHT_MAX
-    if (angle > BEND_TIGHT_MAX) {
-      checks.push({
-        id: bend.id,
-        label: bend.label,
-        status: 'fail',
-        detail: `${angle.toFixed(1)}° off the tent's center line — beyond the ~7° of built-in strap tolerance.`,
-        margin,
-      })
-    } else if (angle > BEND_OK_MAX) {
-      checks.push({
-        id: bend.id,
-        label: bend.label,
-        status: 'tight',
-        detail: `${angle.toFixed(1)}° off the tent's center line — within the ~7° of built-in strap tolerance.`,
-        margin,
-      })
-    } else {
-      checks.push({
-        id: bend.id,
-        label: bend.label,
-        status: 'pass',
-        detail: `${angle.toFixed(1)}° off the tent's center line.`,
-        margin,
-      })
-    }
+    checks.push(bendCheck(bend.id, bend.label, center, bend.corner, bend.tree))
   }
 
   // --- Tent-fit checks (does this corner overshoot past its own tree?) ---
@@ -760,6 +772,415 @@ export function computeFit(
     checks,
     overallVerdict,
   }
+}
+
+/**
+ * The redirect loop's equilibrium position on the circle of radius `pullReach`
+ * around the 4th tree `treeD`, for a strap running corner -> loop -> tree,
+ * frictionless where the pull strap loops around it (equal tension both
+ * sides). Physics:
+ * a frictionless loop can't sustain any net tangential force, so the loop
+ * settles wherever the *total* corner-to-loop-to-tree length is shortest
+ * subject to staying on that circle — equivalently, the classic force-balance
+ * condition that the pull strap (loop -> treeD) exactly bisects the bend
+ * angle at the loop. Verified these two formulations agree numerically
+ * (brute-force circle scan vs. this solver, both converging on the same
+ * point to within float precision) before porting this in — see the physics
+ * derivation the user asked for ("step back to get the physics right ...
+ * can we use a physics simulator").
+ *
+ * Two regimes: the loop sits right on the still-straight corner-tree segment
+ * whenever the circle reaches it at all (see onSegmentLoopPosition, a closed
+ * form — no search, and the only way to land tightness = 0 exactly on the
+ * real tree rather than on some other energy-tied point along the strap);
+ * otherwise a genuine bend, solved by golden-section search on the circle's
+ * angle (unimodal there: folded length is a smooth, single-troughed function
+ * of angle near the geometric guess), bracketed by a +-90 degree window
+ * around the point-on-circle closest to the corner-tree line — always
+ * contains the true minimum since the optimum can't lie further than a
+ * quarter turn from that geometric guess.
+ */
+function foldedStrapLength(corner: Point, tree: Point, treeD: Point, pullReach: number, angle: number): number {
+  const loop = { x: treeD.x + pullReach * Math.cos(angle), y: treeD.y + pullReach * Math.sin(angle) }
+  return distance(corner, loop) + distance(loop, tree)
+}
+
+/**
+ * When the target circle (radius `pullReach` around `treeD`) crosses the
+ * still-straight corner-tree segment, sitting right on that segment always
+ * beats any off-segment/bent alternative — folding through any other point
+ * on the circle can only be longer, by the triangle inequality — so that's
+ * the loop's true equilibrium there, no search needed. A circle can cross a
+ * line at up to two points; energy alone can't distinguish between two
+ * on-segment crossings (both give the same, minimal, unbent total length —
+ * a real degenerate tie, not just a numerical one), so this deliberately
+ * picks whichever crossing is nearer the real tree. That's what keeps this
+ * continuous with `pullReach` = the tree's own distance from `treeD`
+ * (`tightness = 0`) landing exactly on the tree — the other, nearer-corner
+ * crossing is an equally valid *energy* minimum but isn't the physically
+ * meaningful branch connected to "nothing has happened yet." Returns null
+ * when no on-segment crossing exists (the circle is too small to reach the
+ * segment at all), for solveRedirectLoop to fall back to a genuine bend.
+ */
+function onSegmentLoopPosition(corner: Point, tree: Point, treeD: Point, pullReach: number): Point | null {
+  const dx = tree.x - corner.x
+  const dy = tree.y - corner.y
+  const dd = dx * dx + dy * dy
+  if (dd <= 1e-12) return null
+
+  const fx = corner.x - treeD.x
+  const fy = corner.y - treeD.y
+  const fDotD = fx * dx + fy * dy
+  const ff = fx * fx + fy * fy
+  const discriminant = fDotD * fDotD - dd * (ff - pullReach * pullReach)
+  if (discriminant < 0) return null
+
+  const tClosest = -fDotD / dd
+  const root = Math.sqrt(discriminant) / dd
+  const tPlus = tClosest + root
+  const tMinus = tClosest - root
+  const tTree = Math.abs(tPlus - 1) <= Math.abs(tMinus - 1) ? tPlus : tMinus
+  if (tTree < -1e-9 || tTree > 1 + 1e-9) return null
+
+  const t = Math.min(1, Math.max(0, tTree))
+  return { x: corner.x + t * dx, y: corner.y + t * dy }
+}
+
+function solveRedirectLoop(corner: Point, tree: Point, treeD: Point, pullReach: number): Point {
+  if (pullReach <= 1e-9) return { ...treeD }
+
+  const onSegment = onSegmentLoopPosition(corner, tree, treeD, pullReach)
+  if (onSegment) return onSegment
+
+  const dx = tree.x - corner.x
+  const dy = tree.y - corner.y
+  const lengthSquared = dx * dx + dy * dy
+  const t = lengthSquared > 0 ? Math.max(0, Math.min(1, ((treeD.x - corner.x) * dx + (treeD.y - corner.y) * dy) / lengthSquared)) : 0
+  const closest = { x: corner.x + t * dx, y: corner.y + t * dy }
+  const guessAngle = Math.atan2(closest.y - treeD.y, closest.x - treeD.x)
+
+  let lo = guessAngle - Math.PI / 2
+  let hi = guessAngle + Math.PI / 2
+  const gr = (Math.sqrt(5) - 1) / 2
+  let c = hi - gr * (hi - lo)
+  let d = lo + gr * (hi - lo)
+  let fc = foldedStrapLength(corner, tree, treeD, pullReach, c)
+  let fd = foldedStrapLength(corner, tree, treeD, pullReach, d)
+  for (let i = 0; i < LOOP_SEARCH_ITERATIONS; i++) {
+    if (fc < fd) {
+      hi = d
+      d = c
+      fd = fc
+      c = hi - gr * (hi - lo)
+      fc = foldedStrapLength(corner, tree, treeD, pullReach, c)
+    } else {
+      lo = c
+      c = d
+      fc = fd
+      d = lo + gr * (hi - lo)
+      fd = foldedStrapLength(corner, tree, treeD, pullReach, d)
+    }
+  }
+  const angle = (lo + hi) / 2
+  return { x: treeD.x + pullReach * Math.cos(angle), y: treeD.y + pullReach * Math.sin(angle) }
+}
+
+/**
+ * How much pull strap `computeFloatingAnchor` deploys at `tightness = 0`,
+ * its loosest setting: the straight-line distance from the corner's own real
+ * tree to the 4th tree. Deploying exactly that much puts the real tree
+ * itself on the target circle (trivially, `dist(tree, treeD) = ` that same
+ * length) — and by the triangle inequality, folding the main strap through
+ * any *other* point on that circle can only be longer than going straight
+ * through the tree, never shorter, so the tree itself is always the loop's
+ * unique energy-minimizing equilibrium there (see solveRedirectLoop). `fit`
+ * therefore reproduces `baseFit` byte-for-byte at tightness = 0 as a
+ * consequence of the physics, with no special-casing needed to force it —
+ * genuinely "loosely attach, nothing has happened yet."
+ *
+ * (For pull lengths between this and the point where the loop would first
+ * leave the corner-tree line entirely, the same triangle-inequality argument
+ * still picks an on-segment loop position — the physics naturally has a
+ * "slack, does nothing yet" regime before real bending starts, matching how
+ * paying out a very long pull strap in the field doesn't visibly do
+ * anything until you take up enough of the slack.)
+ *
+ * Capped by what the pull strap's own hardware can physically reach
+ * (`settings.strapMax + settings.ratchetLength`) — when the hardware falls
+ * short of the real tree's own distance, tightness = 0 may still show some
+ * bend, since the deployed length can't even reach that far.
+ */
+export function maxRedirectSlackReach(
+  baseFit: FitResult,
+  cornerId: VertexId,
+  redirectTreePos: Point,
+  settings: Settings,
+): number {
+  const realTreePos = baseFit.triangle[cornerId]
+  return Math.min(distance(realTreePos, redirectTreePos), settings.strapMax + settings.ratchetLength)
+}
+
+/**
+ * A 4th-tree "floating anchor" redirect (see FloatingAnchorResult in types.ts,
+ * and the FAQ answer this is modeled on:
+ * `faq_fourth_tree_method_answer` in Tentsile Triangulator
+ * (https://github.com/munifrog/tentsile),
+ * `android/app/src/main/res/values/strings.xml`), matching its own
+ * step-by-step procedure closely: "(4) loosely attach the third strap to the
+ * third tree" — the corner's own strap runs its full, real length, not cut
+ * short — "(5) loop the fourth ratchet around the third strap" — "(6) attach
+ * the fourth strap to the fourth tree" — "(7) tighten the third and fourth
+ * straps together."
+ *
+ * Unlike the app's own earlier two-parameter version of this (a `fraction`
+ * choosing *where* the ratchet grabs, plus a `pullLength` choosing how far
+ * that point got pulled), this is governed by a single physically-derived
+ * `tightness` (0-1): the loop is frictionless, and where a frictionless loop
+ * settles isn't a modeling choice, it's a consequence of equal tension on
+ * both sides — see solveRedirectLoop. `tightness = 0`
+ * deploys the most pull strap that can ever matter (`maxRedirectSlackReach`)
+ * and, right at that length, the loop's equilibrium sits exactly at the
+ * corner's own real tree — `fit` byte-for-byte matching `baseFit`. That's
+ * not a special case bolted on, the physics does it on its own (see
+ * maxRedirectSlackReach); "loosely attach, nothing has happened yet" falls
+ * out of the model instead of needing separate code to guarantee it.
+ * `tightness = 1` deploys none: the loop sits right at the 4th tree, the
+ * tightest the redirect can ever pull. (Earlier iterations tried to pick the
+ * grab point and how far it moved as two independent, ad-hoc geometric
+ * choices — variously overshooting the 4th tree, dragging the tent's whole
+ * rotation toward it, or leaving the grab point frozen and un-pulled — each
+ * caught from a screenshot; the fix wasn't a better heuristic; it was
+ * dropping the heuristics for the actual physics of a loop under tension.)
+ *
+ * The tent's own placement genuinely moves in response, by re-solving the
+ * whole thing via `computeFit` with the loop standing in for `cornerId`'s
+ * own tree — a real tensioned structure finds a new equilibrium once one
+ * corner's effective pull direction changes, the same way the other two
+ * corners already get whatever placement best points them at their own real
+ * trees.
+ *
+ * `computeFit`'s own `solveTriangle` call anchors its solved "A" at its own
+ * origin and "B" along its own +x axis, unrelated to `baseFit`'s frame, so
+ * its raw output is mapped back via `buildFrameMapper` before it means
+ * anything positioned next to a real tree or the loop — same correction
+ * `projectOtherTrees` already needs for the same reason.
+ *
+ * The strap-length check for `cornerId` covers the *bent total* path
+ * (`cornerToGrabReach + grabToTreeReach`, using the corner's newly re-solved
+ * position), always at least as long as the straight-line reach `computeFit`
+ * itself reports for that corner; trunk-diameter is dropped (a loop has no
+ * trunk); a new check covers the pull strap's own length (which, by
+ * construction, never exceeds `settings.strapMax + settings.ratchetLength` —
+ * see maxRedirectSlackReach — so it can only ever read "tight," i.e. too
+ * close for the ratchet's own basket loop, never "too far"). Every other
+ * check — including the *other* two corners' bend and reach, which can
+ * legitimately shift now that the tent's placement does — comes straight
+ * from the re-solved fit.
+ */
+export function computeFloatingAnchor(
+  baseFit: FitResult,
+  cornerId: VertexId,
+  redirectTreePos: Point,
+  tightness: number,
+  diameters: { diameterA: number | null; diameterB: number | null; diameterC: number | null },
+  settings: Settings,
+  labels: TreeLabels = DEFAULT_LABELS,
+): FloatingAnchorResult {
+  const realTreePos = baseFit.triangle[cornerId]
+  const baseCorner = baseFit[`corner${cornerId}` as 'cornerA' | 'cornerB' | 'cornerC']
+
+  const slackReach = maxRedirectSlackReach(baseFit, cornerId, redirectTreePos, settings)
+  const clampedTightness = Math.min(1, Math.max(0, tightness))
+  const pullReach = slackReach * (1 - clampedTightness)
+  const virtualPoint = solveRedirectLoop(baseCorner, realTreePos, redirectTreePos, pullReach)
+
+  const A = cornerId === 'A' ? virtualPoint : baseFit.triangle.A
+  const B = cornerId === 'B' ? virtualPoint : baseFit.triangle.B
+  const C = cornerId === 'C' ? virtualPoint : baseFit.triangle.C
+
+  const cornerDiameters = { diameterA: diameters.diameterA, diameterB: diameters.diameterB, diameterC: diameters.diameterC }
+  cornerDiameters[`diameter${cornerId}` as 'diameterA' | 'diameterB' | 'diameterC'] = null
+
+  const rawFit = computeFit(
+    { dAB: distance(A, B), dBC: distance(B, C), dCA: distance(C, A), ...cornerDiameters },
+    settings,
+    labels,
+  )
+
+  const resolvedFit: FitResult = rawFit.triangle.valid
+    ? (() => {
+        const mapToFrame = buildFrameMapper(rawFit.triangle.A, rawFit.triangle.B, rawFit.triangle.C, A, B, C)
+        return {
+          ...rawFit,
+          center: mapToFrame(rawFit.center),
+          cornerA: mapToFrame(rawFit.cornerA),
+          cornerB: mapToFrame(rawFit.cornerB),
+          cornerC: mapToFrame(rawFit.cornerC),
+          triangle: { ...rawFit.triangle, A, B, C },
+        }
+      })()
+    : rawFit
+
+  const corner = resolvedFit[`corner${cornerId}` as 'cornerA' | 'cornerB' | 'cornerC']
+  const cornerToGrabReach = distance(corner, virtualPoint)
+  const grabToTreeReach = distance(virtualPoint, realTreePos)
+  const totalReach = cornerToGrabReach + grabToTreeReach
+  const totalStrap = totalReach - settings.ratchetLength
+
+  const redirectReach = distance(virtualPoint, redirectTreePos)
+  const redirectStrap = redirectReach - settings.ratchetLength
+
+  // The angle, at the grab point, between the pull strap (grab point -> the
+  // real 4th tree) and the redirected strap's own first segment (corner ->
+  // grab point) — purely informational, derived from the loop's
+  // force-balance equilibrium (see solveRedirectLoop) rather than an
+  // independent design choice: whatever it reads is whatever a real
+  // frictionless loop under tension would settle at for this geometry and
+  // tightness, not a target to aim for.
+  const redirectAngleDeg = angleBetweenVectors(corner, virtualPoint, virtualPoint, redirectTreePos)
+
+  const checks: CheckResult[] = resolvedFit.checks
+    .filter((c) => c.id !== `trunk${cornerId}`)
+    .map((c) => (c.id === `strap${cornerId}` ? strapCheck(c.id, c.label, totalReach, totalStrap, settings) : c))
+  checks.push(strapCheck('redirectStrap', 'Redirect strap (grab point → 4th tree)', redirectReach, redirectStrap, settings))
+
+  const overallVerdict = checks.reduce<CheckResult['status']>(
+    (worst, c) => (checkStatusRank(c.status) > checkStatusRank(worst) ? c.status : worst),
+    'pass',
+  )
+
+  const fit: FitResult = {
+    ...resolvedFit,
+    [`reach${cornerId}`]: totalReach,
+    [`strap${cornerId}`]: totalStrap,
+    checks,
+    overallVerdict,
+  }
+
+  return { cornerId, virtualPoint, fit, cornerToGrabReach, grabToTreeReach, redirectReach, redirectStrap, redirectAngleDeg }
+}
+
+/**
+ * Finds the *least* tightness (0-1) that gives this redirect a clean "Good
+ * fit" (`overallVerdict === 'pass'`), rather than making the user hunt for it
+ * by hand or cranking it needlessly tight. Deliberately targets a clean pass
+ * — every check comfortably clear of its own threshold — not merely "no
+ * check technically failing" (`margin >= 0`, the fail boundary): that
+ * looser bar is fragile, since it lets the search settle for a razor-thin
+ * margin on some check that has nothing to do with the redirected corner,
+ * far from where the corner's own actual issue gets resolved. Caught
+ * directly from a screenshot and the report "the proposed solution moves the
+ * tent almost to the added tree": a first version targeting `margin >= 0`
+ * returned 77% tightness — overshooting into a near-fully-cranked, visibly
+ * distorted placement — when 6% already gave a clean "Good fit" and the
+ * corner's own bend even passed clean through a 90° pull around 14%; told
+ * directly, "the autofit should try to solve for the least pull that gives
+ * an OK result," meaning a result actually worth calling OK, not a technical
+ * non-failure. Not just the redirected corner's own checks: re-solving the
+ * tent shifts the *other* two corners too (see computeFloatingAnchor), and a
+ * tightness that fixes one corner while leaving another merely "tight" or
+ * worse isn't a clean pass overall either.
+ *
+ * Least tightness, not best: a real pull strap under more tension than it
+ * needs to be is just unnecessary load on the hardware and the trees, so
+ * this deliberately stops at the first tightness (scanning up from 0) that
+ * clears the bar rather than continuing to search for whatever tightness
+ * clears it by the *most* — even if some larger tightness would score
+ * better, it's not what a person tightening this in the field would want by
+ * default. If tightness = 0 already clears it, no pull is needed at all —
+ * matching `computeFloatingAnchor`'s own tightness = 0 exactly reproducing
+ * the un-redirected fit.
+ *
+ * The pass/fail boundary isn't guaranteed to cross only once as tightness
+ * rises — so this scans a coarse grid first (cheap: computeFit is a single
+ * closed-form triangle solve, not a combinatorial search) and only bisects
+ * the interval where it *first* crosses into "Good fit" for a precise
+ * answer, rather than assuming that's the only crossing. If it never crosses
+ * at all in [0, 1] — this redirect can't get a clean pass no matter how
+ * tight — falls back to whichever tightness scores best by worst-margin,
+ * refined with golden-section search (safe there: unlike finding the
+ * *first* crossing, maximizing a single hump around the best coarse sample
+ * doesn't depend on there being only one).
+ */
+export function solveFloatingAnchorTightness(
+  baseFit: FitResult,
+  cornerId: VertexId,
+  redirectTreePos: Point,
+  diameters: { diameterA: number | null; diameterB: number | null; diameterC: number | null },
+  settings: Settings,
+  labels: TreeLabels = DEFAULT_LABELS,
+): number {
+  const evaluate = (tightness: number): { worstMargin: number; isGoodFit: boolean } => {
+    const result = computeFloatingAnchor(baseFit, cornerId, redirectTreePos, tightness, diameters, settings, labels)
+    return {
+      worstMargin: result.fit.checks.reduce((worst, c) => Math.min(worst, c.margin), Infinity),
+      isGoodFit: result.fit.overallVerdict === 'pass',
+    }
+  }
+
+  const GRID_SAMPLES = 100
+
+  let bestT = 0
+  const zero = evaluate(0)
+  let bestScore = zero.worstMargin
+  if (zero.isGoodFit) return 0
+
+  for (let i = 1; i <= GRID_SAMPLES; i++) {
+    const t = i / GRID_SAMPLES
+    const { worstMargin, isGoodFit } = evaluate(t)
+    if (worstMargin > bestScore) {
+      bestScore = worstMargin
+      bestT = t
+    }
+    if (isGoodFit) {
+      // Crossed from "not a good fit" to "good fit" between the previous
+      // sample and this one — bisect for the precise least tightness that
+      // clears it, rather than settling for the grid's own 1%-wide
+      // resolution. A clean "pass" verdict (every check comfortably clear of
+      // its own threshold), not merely no check technically failing — a
+      // razor-thin margin=0 crossing is fragile and can land somewhere far
+      // from where the redirected corner's own issue is actually resolved
+      // (caught directly: "the proposed solution moves the tent almost to
+      // the added tree" at a 77% result, when 6% already gave a clean "Good
+      // fit").
+      let lo = (i - 1) / GRID_SAMPLES
+      let hi = t
+      for (let j = 0; j < 40; j++) {
+        const mid = (lo + hi) / 2
+        if (evaluate(mid).isGoodFit) hi = mid
+        else lo = mid
+      }
+      return hi
+    }
+  }
+
+  // Never reaches a clean "Good fit" anywhere in [0, 1] — fall back to
+  // whichever tightness comes closest (maximizing the same worst-margin
+  // score), refined locally with golden-section search.
+  let lo = Math.max(0, bestT - 1 / GRID_SAMPLES)
+  let hi = Math.min(1, bestT + 1 / GRID_SAMPLES)
+  const gr = (Math.sqrt(5) - 1) / 2
+  let c = hi - gr * (hi - lo)
+  let d = lo + gr * (hi - lo)
+  let fc = evaluate(c).worstMargin
+  let fd = evaluate(d).worstMargin
+  for (let i = 0; i < 30; i++) {
+    if (fc > fd) {
+      hi = d
+      d = c
+      fd = fc
+      c = hi - gr * (hi - lo)
+      fc = evaluate(c).worstMargin
+    } else {
+      lo = c
+      c = d
+      fc = fd
+      d = lo + gr * (hi - lo)
+      fd = evaluate(d).worstMargin
+    }
+  }
+  const refinedT = (lo + hi) / 2
+  return evaluate(refinedT).worstMargin > bestScore ? refinedT : bestT
 }
 
 /**
@@ -995,13 +1416,45 @@ function rotate(p: Point, angle: number): Point {
 }
 
 /**
+ * Builds a function mapping points from one frame into another, given the
+ * known correspondence of 3 (non-collinear) points between them — a 2-point
+ * similarity transform (translation + rotation + mirror when the two
+ * triangles' chirality differs), exact up to floating point since both
+ * triangles share exact pairwise distances by construction. Used both to
+ * project the rest of a grove into a combo's local display frame
+ * (projectOtherTrees) and to map a freshly re-solved sub-fit's own local
+ * frame back into the frame its input distances were measured in
+ * (computeFloatingAnchor) — solveTriangle always anchors its solved point
+ * "A" at its own origin and "B" along its own +x axis, with no relation to
+ * any other frame's absolute orientation or chirality, so re-solving a
+ * triangle and then just reusing its raw output only works by coincidence.
+ */
+function buildFrameMapper(
+  sourceA: Point,
+  sourceB: Point,
+  sourceC: Point,
+  targetA: Point,
+  targetB: Point,
+  targetC: Point,
+): (p: Point) => Point {
+  const mirror = Math.sign(signedArea(sourceA, sourceB, sourceC)) !== Math.sign(signedArea(targetA, targetB, targetC))
+  const mirrorPoint = (p: Point): Point => (mirror ? { x: p.x, y: -p.y } : p)
+
+  const sourceAngle = Math.atan2(sourceB.y - sourceA.y, sourceB.x - sourceA.x)
+  const targetAngle = Math.atan2(targetB.y - targetA.y, targetB.x - targetA.x)
+  const theta = targetAngle - sourceAngle
+
+  return (p: Point): Point => {
+    const relative = { x: p.x - sourceA.x, y: p.y - sourceA.y }
+    const local = mirrorPoint(rotate(relative, -theta))
+    return { x: local.x + targetA.x, y: local.y + targetA.y }
+  }
+}
+
+/**
  * Maps every grove tree NOT in the selected combo into that combo's local
  * display frame (the one solveTriangle built: A at the origin, B on +x),
- * purely so the visualization can plot the whole grove for context. Built
- * from a 2-point similarity transform (translation + rotation + optional
- * mirror) between the combo's local A/B/C and their global positions —
- * exact up to floating point, since the two triangles share exact distances
- * by construction.
+ * purely so the visualization can plot the whole grove for context.
  */
 export function projectOtherTrees(
   trees: TreeEntry[],
@@ -1016,23 +1469,17 @@ export function projectOtherTrees(
   const globalC = positions[k]
   if (!globalA || !globalB || !globalC) return []
 
-  const mirror = Math.sign(signedArea(triangle.A, triangle.B, triangle.C)) !== Math.sign(signedArea(globalA, globalB, globalC))
-  const mirrorPoint = (p: Point): Point => (mirror ? { x: p.x, y: -p.y } : p)
-
-  const localAngle = Math.atan2(triangle.B.y - triangle.A.y, triangle.B.x - triangle.A.x)
-  const globalAngle = Math.atan2(globalB.y - globalA.y, globalB.x - globalA.x)
-  const theta = globalAngle - localAngle
+  const mapToLocal = buildFrameMapper(globalA, globalB, globalC, triangle.A, triangle.B, triangle.C)
 
   const result: OtherTreePoint[] = []
   for (let idx = 0; idx < trees.length; idx++) {
     if (idx === i || idx === j || idx === k) continue
     const p = positions[idx]
     if (!p) continue
-    const relative = { x: p.x - globalA.x, y: p.y - globalA.y }
-    const local = mirrorPoint(rotate(relative, -theta))
     result.push({
+      index: idx,
       display: formatTreeDisplay(idx + 1, trees[idx].label),
-      pos: { x: local.x + triangle.A.x, y: local.y + triangle.A.y },
+      pos: mapToLocal(p),
       diameter: trees[idx].diameter,
     })
   }

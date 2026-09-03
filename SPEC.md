@@ -320,7 +320,7 @@ diverge from the alternative below by **meters** of computed strap length for
 the same trees — enough to flip which tree the tool recommends for the tip
 corner, not just a rounding difference.
 
-The independently-developed reference app **"Tentsile Triangulator"**
+The independently-developed **Tentsile Triangulator**
 (https://github.com/munifrog/tentsile — already the source of the §3 Fermat-point
 cross-check) takes a different approach for every real isosceles product it
 models (Connect, Duo, Flite, T-Mini, Una): a **non-equidistant** hub, with the
@@ -353,20 +353,20 @@ these numbers against reality. The UI shows a warning to that effect whenever
   §3b "Choosing the reference pair"); each other tree gives distances to both
   references, plus a "flip side" toggle (see §3b). Each tree also has an optional
   free-text label (empty by default — see §3b "Tree identity").
-- Tent shape: a preset dropdown (v12) covering every real Tentsile model the
-  reference app "Tentsile Triangulator" (munifrog/tentsile) models except
-  "Universe" (its own source names it a test placeholder) and "Trilogy" (a
-  three-tent cluster, a different multi-unit layout this app doesn't
-  represent) — **Stingray**, **Vista**, **Trillium** (all 4.1 m equilateral),
-  **Trillium XL** (6.0 m equilateral), **Connect**, **Duo** (4 / 4 / 2.7 m
-  isosceles), **Flite**, **T-Mini** (3.25 / 3.25 / 2.7 m isosceles), **Una**
-  (2.9 / 2.9 / 1.6 m isosceles, and the only preset that also overrides the
-  default 6 m strap max to Una's own 4 m) — plus **Custom** for an editable
-  leg/base pair. Dimensions are sourced from the reference app's own
+- Tent shape: a preset dropdown (v12) covering every real Tentsile model
+  Tentsile Triangulator (munifrog/tentsile) models except "Universe" (its own
+  source names it a test placeholder) and "Trilogy" (a three-tent cluster, a
+  different multi-unit layout this app doesn't represent) — **Stingray**,
+  **Vista**, **Trillium** (all 4.1 m equilateral), **Trillium XL** (6.0 m
+  equilateral), **Connect**, **Duo** (4 / 4 / 2.7 m isosceles), **Flite**,
+  **T-Mini** (3.25 / 3.25 / 2.7 m isosceles), **Una** (2.9 / 2.9 / 1.6 m
+  isosceles, and the only preset that also overrides the default 6 m strap
+  max to Una's own 4 m) — plus **Custom** for an editable leg/base pair.
+  Dimensions are sourced from Tentsile Triangulator's own
   `ComposeActivity.java` constants rather than re-measured independently
   (consistent with already leaning on that source for the isosceles hub
   model, see §3c); this also corrects Connect's base from an earlier 2.56 m
-  to the reference app's 2.7 m for the same reason.
+  to Tentsile Triangulator's 2.7 m for the same reason.
 - Strap max length (default 6 m, editable).
 - Ratchet length (default 0.5 m, editable).
 - Optional per-tree trunk diameter (defaults to 40 cm if left blank), used for the
@@ -490,6 +490,170 @@ existing collapsible-section pattern (checks/settings/legend) rather than a
 modal/popup — no focus-trap, backdrop, or z-index management needed, and it's
 consistent with how every other secondary panel in the app already works.
 
+## 6d. Floating anchor / 4th tree redirect (v13, corrected v15–v18, re-derived from physics v19, auto-fit added v20, corrected v21, experimental)
+
+Modeled on Tentsile Triangulator's `faq_fourth_tree_method_answer`: physically,
+strap 3 ties loosely to its own real tree — its *full, real length*, not cut
+short — a spare ratchet loops around that strap, and a spare strap runs
+sideways from that loop to a 4th tree; tightening both together bends strap 3
+at the loop without shortening it, redirecting the corner's effective
+direction.
+
+**v19: a single physically-derived `tightness` (0–100%), not a hand-picked
+grab point.** Versions through v18 modeled the loop's position with two
+independent, hand-picked parameters (`fraction` for *where* along the strap
+it grabbed, `pullLength` for how far that point had been pulled) — but a real
+loop threaded around a strap, with a second strap pulling it sideways, is a
+*frictionless pulley*: it can't sustain any net force along the strap, so its
+resting position isn't a free modeling choice, it's dictated entirely by how
+much of the pull strap has been deployed. After several rounds of hand-picked
+geometry going wrong in ways caught only by screenshots (see below), the
+question was put back to first principles ("step back to get the physics
+right ... can we use a physics simulator, or you can give me samples that I
+will comment") and re-derived from there — confirmed against the proposal and
+sample table ("seems right") before being ported into the app.
+
+The physics: a frictionless loop's equilibrium is where the *total*
+corner-to-loop-to-tree path is shortest, subject to the loop staying on the
+circle of radius `pullReach` around the 4th tree (`pullReach` = however much
+pull strap has been deployed) — equivalently, the classic force-balance
+condition that the pull strap exactly bisects the bend angle at the loop.
+`solveRedirectLoop` (`geometry.ts`) solves this in two regimes:
+
+- **Slack** — whenever that circle reaches the corner's still-straight
+  strap-to-its-own-tree line at all, sitting right on that line beats any
+  off-line/bent alternative (triangle inequality: folding through any other
+  point on the circle can only be longer). Closed form
+  (`onSegmentLoopPosition`), not a search — a circle can cross a line at up to
+  two points, and since *both* give the same, minimal, unbent length, this is
+  a genuine physical tie broken by picking whichever crossing is nearer the
+  real tree (see below for why that specific tie-break matters).
+- **Bent** — once the circle is too small to reach that line, golden-section
+  search over the circle's angle (provably unimodal there).
+
+`tightness = 0` deploys the most pull strap that could ever matter: the
+straight-line distance from the corner's own real tree to the 4th tree. At
+exactly that length, the real tree itself sits on the target circle, and by
+the same triangle-inequality argument it's the *loop's* equilibrium there too
+— not a special case bolted on, just where the tie-break above lands. `fit`
+therefore reproduces the un-redirected fit byte-for-byte at `tightness = 0`,
+with no separate code needed to force it: "loosely attach, nothing has
+happened yet" falls out of the model. `tightness = 1` deploys none — the loop
+sits right at the 4th tree, the tightest the redirect can ever pull. Capped
+by what the pull strap's own hardware can physically reach
+(`strapMax + ratchetLength`): when the hardware falls short of the real
+tree's own distance, `tightness = 0` may still show some bend.
+
+**The tent's own placement genuinely moves in response to a redirect** — it
+is *not* held fixed. A real tensioned structure finds a new equilibrium once
+one corner's effective pull direction changes, the same way the other two
+corners already get whatever placement best points them at their own real
+trees. `computeFloatingAnchor` re-solves the whole fit via `computeFit`, with
+the loop standing in for `cornerId`'s own real tree — the same general-purpose
+solve every ordinary 3-tree fit already goes through, just fed a different
+3rd point. (`computeFit`'s own `solveTriangle` call anchors its solved "A" at
+its own origin and "B" along its own +x axis, unrelated to the base fit's
+frame, so the raw output is mapped back via `buildFrameMapper` before it means
+anything positioned next to a real tree or the loop — the same correction
+`projectOtherTrees` already needs, for the same reason.)
+
+The redirected corner's own strap keeps running to its real tree past the
+loop (`cornerToGrabReach` + `grabToTreeReach`, using the corner's newly
+re-solved position) rather than stopping there, plus a third, new segment for
+the pull strap itself (`redirectReach`, which by construction never exceeds
+`strapMax + ratchetLength`, so its own check can only ever read "tight," never
+"too far"). Its strap-length check covers that *bent total* path, always at
+least as long as the straight-line reach `computeFit` reports for that corner.
+Trunk-diameter is dropped (a loop has no trunk). Every other check — including
+the *other* two corners' bend and reach, which can legitimately shift now that
+the tent's placement does — comes straight from the re-solved fit.
+
+**v20: `tightness` is auto-solved, not left at 0 for the user to drag up by
+hand — and specifically for the *least* pull that gets there, not the best
+achievable.** Prompted directly: "instead manually selecting the point/pull,
+we can try to calculate the pull needed to reach a good fit given a 4th
+tree" — then, once the first version maximized overall margin instead,
+corrected directly: "the autofit should try to solve for the least pull that
+gives an OK result." `solveFloatingAnchorTightness` scans `tightness` up from
+0 and returns the *first* value that clears the bar (bisected for precision,
+not just the scan's own grid resolution) — a real pull strap under more
+tension than it needs is unnecessary load on the hardware and the trees, so
+this deliberately stops there even when some larger tightness would score
+better. If `tightness = 0` already clears it, no pull is needed at all. Not
+just the redirected corner's own checks: re-solving shifts the other two
+corners too, and a tightness that fixes one corner while leaving another
+worse isn't OK overall.
+
+**v21: that bar is a clean "Good fit," not merely "nothing technically
+failing."** Every `CheckResult` carries a `margin` where higher is always
+better and 0 is right at the fail boundary — the first version's bar was
+`margin >= 0` across every check, only ruling out an outright fail. Caught
+directly, with a screenshot and "the proposed solution moves the tent almost
+to the added tree": that bar found 77% tightness, a near-fully-cranked,
+visibly distorted placement — when 6% already gave a clean "Good fit" and the
+corner's own bend passed clean through a 90° pull around 14%. `margin >= 0`
+is a razor's edge by definition (a single point on the margin axis, not a
+band), so the scan could land on some *other*, unrelated check's paper-thin
+non-failing sliver — nothing to do with the redirected corner's own issue —
+long before the redirected corner's own problem is actually resolved. The
+fix: target `overallVerdict === 'pass'` instead — every check clear of its
+own threshold with real room to spare, since each check's own "tight" zone
+between "pass" and "fail" (e.g. `BEND_OK_MAX` = 2° vs `BEND_TIGHT_MAX` = 7°)
+acts as a buffer, so a genuine "pass" region has real width to land in,
+unlike a `margin = 0` crossing. Falls back to maximizing the same
+worst-margin score (unchanged from v20) only when no tightness in [0, 1] ever
+reaches a clean pass at all.
+
+Picking a redirect corner or 4th tree (or first enabling the feature, or
+switching the selected 3-tree combo — "corner C" is just a role within
+whichever combo is selected, not a fixed tree identity) re-runs this
+automatically; an explicit "Auto-fit" button lets the user snap back to it
+after manually dragging the slider away.
+
+*(Four wrong versions before v19, each caught from a screenshot or direct
+correction, not from code review.* v13's *first* version re-solved the whole
+tent but built the grab point by interpolating toward the 4th tree's position
+directly instead of toward a point on the corner's own strap — an unrelated
+line, which dragged the tent's rotation toward the 4th tree outright, visibly
+swinging even the two unrelated corners' straps. Trying to avoid that swing,
+the next version overcorrected by keeping the base fit's placement rigidly
+fixed instead of re-solving at all — a real redirect *should* let the tent
+settle into a new placement, just not an arbitrary, wrong-line one; caught
+from being told directly that "the assumption that tent not move is wrong."
+Before reaching that fixed-placement version, one further version had put the
+grab point on the *wrong line* (still toward the 4th tree, not the corner's
+own real tree) — caught from a screenshot with the correct path hand-drawn
+over it — and the version after *that* fix cut the redirected corner's strap
+short at the grab point instead of continuing it to the real tree, with no way
+to pull it off that line at all — caught from feedback that "the strap to the
+main tree should continue before and after with a bend at the point." v18
+fixed all of that with a hand-picked `fraction`/`pullLength` pair, correctly
+reproducing the un-redirected fit at `pullLength = 0` — but the *position*
+along the strap was still a geometric heuristic (closest point / 90° pull),
+not physics, which is what prompted the step back to first principles that
+produced v19.)*
+
+Opt-in and self-contained (`FloatingAnchor.tsx`, controlled from `App.tsx` so
+the Layout diagram can draw the same redirect this panel describes): appears
+under the results only when the grove has a spare tree, defaults to off, and
+never touches the main 3-tree ranking/fit (which still uses each combo's
+ordinary, un-redirected fit). The Layout diagram draws all 4 straps at once
+when active — the two "unaffected" corners now genuinely reflecting the
+re-solved placement (their own strap lengths can visibly change too), the
+redirected corner's own strap visibly kinked at the loop (continuing on to its
+real tree past that point), and the third, pull segment running on to the 4th
+tree — with the loop and both of its segments drawn in a distinct color (see
+the Legend). The tent shape itself now visibly moves on the diagram as
+`tightness` changes.
+
+Known limitation, called out directly in the UI: the redirected corner's own
+edge-distance and angle checks still treat that end as if it had a real tree
+there (in addition to the trunk-diameter check already dropped above) —
+there's no clean way to special-case those without much more bespoke logic,
+so the UI flags it rather than pretending it's exact. Marked "experimental"
+for the same reason the isosceles hub model carries a warning (§3c): nobody
+has field-tested this against a real floating-anchor pitch.
+
 ## 7. Tech stack (final)
 
 - Single-page app, client-side only (no backend needed — pure geometry/math).
@@ -510,23 +674,17 @@ consistent with how every other secondary panel in the app already works.
 
 ### 8a. Future expansion (considered, not yet implemented)
 
-Both ideas below come from the reference app "Tentsile Triangulator"
-(munifrog/tentsile) and are worth another look later, but are deliberately not
-attempted now:
+The 4th "floating anchor" tree fallback that used to be listed here is now
+implemented (§6d) — experimental, but no longer a future idea. The remaining
+one comes from Tentsile Triangulator (munifrog/tentsile) too, and is worth
+another look later, but is deliberately not attempted now:
 
-- **4th "floating anchor" tree fallback.** The reference app's FAQ
-  (`faq_fourth_tree_method_answer`) walks through using a spare ratchet/strap
-  on a 4th tree purely to redirect one corner's strap direction, not as a
-  full alternative anchor point — a genuinely different feature from this
-  app's "pick the best 3-tree combination from a larger grove" (§3b), which
-  already covers "just use a different tree" but not "bend one strap around
-  a tree that isn't part of the fit."
-- **Drag-and-drop / tap-to-edit diagram editing.** The reference app is built
-  around dragging approximate tree markers on screen (with an on-canvas
-  label you tap to fine-tune); this app is deliberately built around
-  precise tape-measure distances entered in the tree table instead (§4).
-  Adding draggable markers as an *alternative* input path — kept in sync
-  with the table, not replacing it — is plausible future work, not a gap in
+- **Drag-and-drop / tap-to-edit diagram editing.** Tentsile Triangulator is
+  built around dragging approximate tree markers on screen (with an
+  on-canvas label you tap to fine-tune); this app is deliberately built
+  around precise tape-measure distances entered in the tree table instead
+  (§4). Adding draggable markers as an *alternative* input path — kept in
+  sync with the table, not replacing it — is plausible future work, not a gap in
   the current model.
 
 ## 9. Decisions log
@@ -559,7 +717,14 @@ All open questions from the draft have been resolved:
 | Level check (v7) | Assume equal strap starting height on all three trees (matches recommended pitching technique) rather than asking the user to also enter each tree's attachment height — keeps the tool to a single tilt reading per corner instead of doubling the inputs; adjustment is expressed as centimeters to move the tie-off point on the trunk (correcting the eyeballed height directly), not as a ratchet strap-length change |
 | Terminology cleanup (v8) | Renamed the fixed ~0.5 m hardware from "tail/tether" to **ratchet**, and the adjustable ~6 m webbing from "ratchet strap" to **strap** (diverges from Tentsile's own "ratchet + tail" phrasing from §2, kept for in-app clarity); merged the separate "Strap to X" (too-long) and "Tail fit at X" (basket-loop) checks into one "Strap to X" check per corner, since both were really describing bounds on the same strap |
 | Usage guide (v9) | Expandable `<details>` panel (collapsed by default) rather than a modal/popup — reuses the app's existing collapsible-section pattern instead of introducing a new interaction (focus trap, backdrop, dismiss handling) for a single low-frequency use case |
-| Isosceles hub model (v11) | Replaced the circumcenter-based hub with the reference app's ("Tentsile Triangulator", munifrog/tentsile) non-equidistant hub-angle formula (`90° + asin(base/2/leg)`, `indent=0`) — simulation showed the two models can disagree by meters of strap length for the same trees; added a UI warning for non-equal-sided tents since neither model is a verified physical measurement (see §3c) |
-| Imperial units + full preset list (v12) | Added a metric/imperial toggle (`units.ts`, display/input boundary only — every stored value stays in meters) and 7 more tent presets sourced from the reference app's own constants (§4); `CheckResult.detail` text stays metric-only rather than threading a display concern into `geometry.ts` (see §4); moved the 4th-tree and drag-and-drop-editing ideas into an explicit "future expansion" note (§8a) instead of a flat "out of scope" |
+| Isosceles hub model (v11) | Replaced the circumcenter-based hub with Tentsile Triangulator's (munifrog/tentsile) non-equidistant hub-angle formula (`90° + asin(base/2/leg)`, `indent=0`) — simulation showed the two models can disagree by meters of strap length for the same trees; added a UI warning for non-equal-sided tents since neither model is a verified physical measurement (see §3c) |
+| Imperial units + full preset list (v12) | Added a metric/imperial toggle (`units.ts`, display/input boundary only — every stored value stays in meters) and 7 more tent presets sourced from Tentsile Triangulator's own constants (§4); `CheckResult.detail` text stays metric-only rather than threading a display concern into `geometry.ts` (see §4); moved the 4th-tree and drag-and-drop-editing ideas into an explicit "future expansion" note (§8a) instead of a flat "out of scope" |
+| Floating anchor (v13, experimental) | Implemented the 4th-tree redirect from §8a (see §6d): a grab-point slider recomputes the whole fit via unmodified `computeFit`, matching Tentsile Triangulator's own "position doesn't matter much" guidance; added `buildFrameMapper` (a general 2-point similarity transform, also now shared with `projectOtherTrees`) after finding the naive approach silently mirrored the redirected corner whenever the grab point fell on the far side of the AB line from `solveTriangle`'s placement convention |
+| Floating anchor auto-pick (v14) | Picking a redirect corner/tree now auto-sets the slider via `solveRedirectFraction` — switched from targeting a 90° "vector pull" angle to minimizing total strap length after finding 90° isn't always reachable, where a length minimum always is; also switched from bisection to dense two-pass sampling after finding the target isn't continuous in the fraction (`placeTent`'s bend-tolerance blending can jump between placements); the angle is still computed and shown, just no longer the optimization target |
+| Floating anchor rewrite (v15) | v13's re-solve-the-whole-tent approach was wrong — caught from a screenshot showing the tent swinging to point at the 4th tree instead of one strap adjusting toward it. Rewrote `computeFloatingAnchor` to reuse the base (real 3-tree) fit's center/corners unchanged and only reroute the redirected corner's own strap (extracting `strapCheck`/`bendCheck` out of `computeFit` so both share the exact same per-corner rules); this also retired the now-unnecessary `buildFrameMapper` workaround from v13/14 (see §6d) and made `solveRedirectFraction`'s target genuinely continuous, so v14's "total length" auto-pick — no longer tracking a moving corner — was switched again to minimizing bend, since a length-only minimum turned out to land wherever was geometrically closest regardless of bend, occasionally picking a *worse* one than the corner already had |
+| Floating anchor grab-point line fix (v16) | v15 still interpolated the grab point toward the 4th tree instead of the redirected corner's own real tree — the wrong line, caught from a hand-drawn correction over a screenshot showing where the grab point should actually sit (on strap 3's own straight run). Moved the grab point onto that line instead; since it's now a fixed line, bend at the corner turned out to be exactly constant along it (no longer needing `bendCheck` recomputed at all — nothing left to vary), and finding the 4th tree's closest point on that line became a closed-form projection instead of a search, which is also exactly a 90° vector pull when unclamped — replacing v15's bend-minimizing sample scan with an instant, exact calculation and finally reconciling the 90°-vs-shortest-length tension from v13/14 (see §6d): on the correct line, they're the same point |
+| Floating anchor pull length (v17) | v16 pinned the grab point exactly to `fraction` on the corner→real-tree line with no way to move off it, and cut strap 3 short there instead of letting it continue to the real tree — wrong on both counts, caught from feedback that the strap should "continue before and after with a bend at the point" and that the redirect wasn't visibly pulling anything toward the 4th tree. Added `pullLength` (meters, starts at 0, independent from `fraction`) as the actual sideways displacement, and restored the two-segment "corner → grab point" + "grab point → real tree" path (see §6d) so bend genuinely responds to how far it's pulled again — verified it can now walk a corner from a failing 45° bend down to a passing ~0° and back up past it as pull increases, confirming the mechanism does what a real vector-pull redirect is for |
+| Floating anchor tent re-solve (v18) | v17's "keep the tent fixed" assumption was itself wrong — told directly that a real redirect lets the whole tensioned structure settle into a new placement, not just one strap. Went back to re-solving the whole fit via `computeFit` with the grab point standing in for the redirected corner's tree (restoring `buildFrameMapper`, needed again for the same reason `projectOtherTrees` needs it), keeping the `fraction`/`pullLength` grab-point model from v17. Found and fixed one regression from combining the two: pulling from the `fraction` point (as v17 did) rather than from the real tree meant even `pullLength = 0` no longer reproduced the un-redirected fit (a phantom shift up to several meters in testing) — moved the pull's origin to the real tree's own position (direction still set by `fraction`) so `pullLength = 0` is exact again, verified by direct comparison |
+| Floating anchor combo-switch fix (v19) | Switching the selected 3-tree combo tab left the floating-anchor state (corner, grab point, pull) stale from the *previous* combo's geometry — "corner C" is just a role within whichever combo is selected, not a fixed tree identity, so the old percent/pullLength got silently reapplied to a different corner/tree pair, producing a visibly disconnected, nonsensical diagram; caught from a screenshot. Added a `useEffect` keyed on the selected combo's key that re-runs the same corner/tree auto-solve the explicit dropdowns already trigger, so switching combos always lands on a fresh, valid grab point instead of carrying over a stale one |
 
 Spec is considered final for the current implementation.

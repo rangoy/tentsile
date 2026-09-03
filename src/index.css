@@ -149,6 +149,14 @@ main {
   margin-top: 0.1rem;
 }
 
+.floating-anchor-illustration {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  margin: 0.5rem auto;
+}
+
 .warning {
   font-size: 0.85rem;
   margin-top: 0.6rem;
@@ -164,6 +172,20 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.75rem 1rem;
   margin-bottom: 1rem;
+}
+
+.auto-fit-field {
+  display: flex;
+  align-items: flex-end;
+}
+
+.floating-anchor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
 }
 
 .field-grid label {
@@ -296,6 +318,32 @@ main {
 .legend-details[open] summary,
 .guide-details[open] summary {
   margin-bottom: 0.75rem;
+}
+
+/* A disclosure nested inside another one (e.g. "How does this work?" inside
+   "4th tree redirect") — deliberately lighter and indented so it reads as a
+   second level, not another top-level section of its own. */
+.how-it-works-details {
+  margin: 0.6rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+.how-it-works-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  padding: 0.2rem 0;
+  margin-bottom: 0.4rem;
+}
+
+.how-it-works-details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.how-it-works-details .hint {
+  margin-top: 0;
 }
 
 .guide-details {

@@ -1,5 +1,14 @@
-import type { CheckResult, FitResult, TreeLabels, UnitSystem } from '../types'
+import type {
+  CheckResult,
+  FitResult,
+  FloatingAnchorResult,
+  FloatingAnchorState,
+  OtherTreePoint,
+  TreeLabels,
+  UnitSystem,
+} from '../types'
 import { formatLength } from '../units'
+import { FloatingAnchor } from './FloatingAnchor'
 import { LevelCheck } from './LevelCheck'
 
 interface Props {
@@ -7,6 +16,12 @@ interface Props {
   labels: TreeLabels
   ratchetLength: number
   unitSystem: UnitSystem
+  otherTrees: OtherTreePoint[]
+  floatingAnchorState: FloatingAnchorState
+  onFloatingAnchorChange: (patch: Partial<FloatingAnchorState>) => void
+  onAutoFitFloatingAnchor: () => void
+  floatingAnchorResult: FloatingAnchorResult | null
+  redirectTree: OtherTreePoint | null
 }
 
 const BASKET_LOOP_GUIDE_URL = 'https://www.tentsile.com/pages/guides-tips-tricks#closetrees'
@@ -28,7 +43,18 @@ function formatReach(reach: number, strap: number, ratchetLength: number, unit: 
   return `${main} (${formatLength(strap, unit)})`
 }
 
-export function ResultsPanel({ fit, labels, ratchetLength, unitSystem }: Props) {
+export function ResultsPanel({
+  fit,
+  labels,
+  ratchetLength,
+  unitSystem,
+  otherTrees,
+  floatingAnchorState,
+  onFloatingAnchorChange,
+  onAutoFitFloatingAnchor,
+  floatingAnchorResult,
+  redirectTree,
+}: Props) {
   const { triangle } = fit
 
   return (
@@ -84,6 +110,18 @@ export function ResultsPanel({ fit, labels, ratchetLength, unitSystem }: Props) 
               ))}
             </ul>
           </details>
+
+          <FloatingAnchor
+            state={floatingAnchorState}
+            onChange={onFloatingAnchorChange}
+            onAutoFit={onAutoFitFloatingAnchor}
+            result={floatingAnchorResult}
+            redirectTree={redirectTree}
+            otherTrees={otherTrees}
+            labels={labels}
+            ratchetLength={ratchetLength}
+            unitSystem={unitSystem}
+          />
         </>
       )}
     </div>

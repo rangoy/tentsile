@@ -97,6 +97,8 @@ export interface TreeReferences {
 
 /** A grove tree not part of the currently selected combo, positioned in that combo's local frame purely for display. */
 export interface OtherTreePoint {
+  /** index into the trees array */
+  index: number
   /** formatted as "<number>" or "<number> (<label>)" — see formatTreeDisplay */
   display: string
   pos: Point
@@ -162,4 +164,60 @@ export interface FitResult {
   strapC: number
   checks: CheckResult[]
   overallVerdict: CheckStatus
+}
+
+/**
+ * A 4th-tree "floating anchor" redirect for one corner of an otherwise-normal
+ * 3-tree fit (see computeFloatingAnchor in geometry.ts): a ratchet loop
+ * grabs the corner's own strap partway along its length and pulls it
+ * sideways toward a spare tree — the strap still continues on to its own
+ * real tree past that point (bent there), it isn't cut short.
+ */
+export interface FloatingAnchorResult {
+  /** which of the fit's 3 corners is being redirected */
+  cornerId: VertexId
+  /** the grab/redirect point's position, in the same local frame as the base fit's triangle */
+  virtualPoint: Point
+  /**
+   * The redirected corner's fit. `reach{cornerId}`/`strap{cornerId}` now
+   * report the *bent* total path length (corner -> grab point -> the real
+   * tree, i.e. `cornerToGrabReach + grabToTreeReach`) rather than a straight
+   * line — every other check (angles, the other two corners' bend/reach,
+   * trunk diameter, etc.) is otherwise identical to a normal 3-tree fit. Two
+   * caveats specific to the redirected corner: its own trunk-diameter check
+   * is skipped (a grab point has no trunk), and its edge-distance checks
+   * subtract a trunk circumference at an end that isn't really a tree — both
+   * are noted in the UI rather than special-cased here (see
+   * FloatingAnchor.tsx).
+   */
+  fit: FitResult
+  /** corner -> grab point distance, in meters (the first of the two bent segments making up the strap to the corner's own real tree) */
+  cornerToGrabReach: number
+  /** grab point -> the corner's own real tree, in meters (the strap continuing on past the grab point, not stopping there) */
+  grabToTreeReach: number
+  /** grab point -> the real 4th tree, in meters (the new pull strap) */
+  redirectReach: number
+  /** strap-only portion of redirectReach, in meters (see FitResult.strapA and friends) */
+  redirectStrap: number
+  /** angle (0-180°) at the grab point between the pull strap and the redirected corner's own strap (corner -> grab point) — purely informational, whatever a real frictionless loop under tension settles at */
+  redirectAngleDeg: number
+}
+
+/** UI state for the floating-anchor controls — lifted to App so both FloatingAnchor and Visualization can share it. */
+export interface FloatingAnchorState {
+  enabled: boolean
+  cornerId: VertexId
+  /** index into the trees array of the redirect (4th) tree; null until otherTrees is known */
+  redirectIndex: number | null
+  /**
+   * How tight the pull strap is cranked, 0-100. 0 = loosest — the loop
+   * settles exactly at the corner's own real tree, matching the un-redirected
+   * fit exactly ("loosely attach," nothing has happened yet). 100 = tightest
+   * — the loop is pulled all the way to the redirect tree itself. See
+   * computeFloatingAnchor in geometry.ts for why this single number, rather
+   * than a separate grab-point position, is enough: a frictionless loop's
+   * equilibrium position isn't an independent choice, it falls out of the
+   * deployed pull-strap length alone.
+   */
+  tightness: number
 }

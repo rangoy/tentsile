@@ -1,5 +1,4 @@
-import type { Settings, TreeEntry, TreeReferences, UnitSystem } from '../types'
-import { TENT_PRESETS } from '../constants'
+import type { Settings, TreeEntry, TreeReferences } from '../types'
 import { formatTreeDisplay, MAX_TREES, MIN_TREES, PERFORMANCE_WARNING_TREES } from '../geometry'
 import {
   cmToDisplayDiameter,
@@ -19,7 +18,6 @@ interface Props {
   onReferenceChange: (which: 'a' | 'b', newIndex: number) => void
   referenceError: string | null
   settings: Settings
-  onSettingsChange: (settings: Settings) => void
   positionErrors: string[]
 }
 
@@ -41,7 +39,6 @@ export function InputForm({
   onReferenceChange,
   referenceError,
   settings,
-  onSettingsChange,
   positionErrors,
 }: Props) {
   const updateTree = (index: number, patch: Partial<TreeEntry>) => {
@@ -225,96 +222,6 @@ export function InputForm({
           </p>
         )
       )}
-
-      <details className="settings-details">
-        <summary>Tent &amp; strap settings</summary>
-        <div className="field-grid">
-          <label>
-            Units
-            <select
-              value={unit}
-              onChange={(e) => onSettingsChange({ ...settings, unitSystem: e.target.value as UnitSystem })}
-            >
-              <option value="metric">Metric (m / cm)</option>
-              <option value="imperial">Imperial (ft / in)</option>
-            </select>
-          </label>
-          <label>
-            Tent model
-            <select
-              value={settings.tentModel}
-              onChange={(e) => {
-                const tentModel = e.target.value as Settings['tentModel']
-                if (tentModel === 'custom') {
-                  onSettingsChange({ ...settings, tentModel })
-                  return
-                }
-                const preset = TENT_PRESETS[tentModel]
-                onSettingsChange({
-                  ...settings,
-                  tentModel,
-                  tentLegLength: preset.legLength,
-                  tentBaseLength: preset.baseLength,
-                  strapMax: preset.strapMax ?? settings.strapMax,
-                })
-              }}
-            >
-              {(Object.keys(TENT_PRESETS) as Array<keyof typeof TENT_PRESETS>).map((model) => (
-                <option key={model} value={model}>
-                  {TENT_PRESETS[model].label}
-                </option>
-              ))}
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <label>
-            {`Tent leg length (${lengthUnitLabel(unit)})`}
-            <NumberInput
-              min={0.1}
-              step={0.1}
-              disabled={settings.tentModel !== 'custom'}
-              value={toDisplayLen(settings.tentLegLength)}
-              onChange={(n) => onSettingsChange({ ...settings, tentLegLength: fromDisplayLen(n) })}
-            />
-          </label>
-          <label>
-            {`Tent base length (${lengthUnitLabel(unit)})`}
-            <NumberInput
-              min={0.1}
-              step={0.1}
-              disabled={settings.tentModel !== 'custom'}
-              value={toDisplayLen(settings.tentBaseLength)}
-              onChange={(n) => onSettingsChange({ ...settings, tentBaseLength: fromDisplayLen(n) })}
-            />
-          </label>
-          <label>
-            {`Max strap length (${lengthUnitLabel(unit)})`}
-            <NumberInput
-              min={0.1}
-              step={0.1}
-              value={toDisplayLen(settings.strapMax)}
-              onChange={(n) => onSettingsChange({ ...settings, strapMax: fromDisplayLen(n) })}
-            />
-          </label>
-          <label>
-            {`Ratchet length (${lengthUnitLabel(unit)})`}
-            <NumberInput
-              min={0}
-              step={0.05}
-              value={toDisplayLen(settings.ratchetLength)}
-              onChange={(n) => onSettingsChange({ ...settings, ratchetLength: fromDisplayLen(n) })}
-            />
-          </label>
-        </div>
-        {settings.tentLegLength !== settings.tentBaseLength && (
-          <p className="warning">
-            Non-equal-sided tent: the corner positions below are an approximation, not an exact
-            fit — and unlike the Stingray, this app's author hasn't personally tested a
-            non-equal-sided tent against these numbers. Use the sight-indicator tabs on the sides
-            of the real tent/hammock to fine-tune alignment once pitched.
-          </p>
-        )}
-      </details>
     </div>
   )
 }

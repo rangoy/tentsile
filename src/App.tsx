@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { comboKey } from './components/ComboTabs'
 import { InputForm } from './components/InputForm'
-import { LocationSwitcher } from './components/LocationSwitcher'
 import { ResultsPanel } from './components/ResultsPanel'
+import { TopMenu } from './components/TopMenu'
 import { UsageGuide } from './components/UsageGuide'
 import { Visualization } from './components/Visualization'
 import { DEFAULT_SETTINGS, isValidSettings } from './constants'
+import { buildBackupPayload, parseBackupPayload } from './dataTransfer'
 import {
   computeFloatingAnchor,
   projectOtherTrees,
@@ -34,6 +35,7 @@ export default function App() {
     addLocation,
     removeLocation,
     renameLocation,
+    importLocations,
   } = useLocations()
   const trees = currentLocation.trees
   const references = currentLocation.references
@@ -41,6 +43,7 @@ export default function App() {
   const setReferences = (next: TreeReferences) => updateCurrentLocation({ references: next })
   const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
   const [referenceError, setReferenceError] = useState<string | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
   const [floatingAnchorState, setFloatingAnchorState] = useState<FloatingAnchorState>(DEFAULT_FLOATING_ANCHOR)
 
@@ -84,6 +87,33 @@ export default function App() {
     setTrees(trees.filter((_, i) => i !== index))
     const shift = (refIndex: number) => (refIndex > index ? refIndex - 1 : refIndex)
     setReferences({ a: shift(references.a), b: shift(references.b) })
+  }
+
+  const handleExport = () => {
+    const payload = buildBackupPayload(locations, settings)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tentsile-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const result = parseBackupPayload(text)
+      const confirmed = window.confirm(
+        `Import ${result.locations.length} location(s)? This replaces every location currently saved in this browser.`,
+      )
+      if (!confirmed) return
+      importLocations(result.locations)
+      if (result.settings) setSettings(result.settings)
+      setImportError(null)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed.')
+    }
   }
 
   const handleReferenceChange = (which: 'a' | 'b', newIndex: number) => {
@@ -182,22 +212,29 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
-        <h1>Tentsile Setup Calculator</h1>
-        <p className="subtitle">
-          Enter your candidate trees to check which 3-tree combination fits best and get strap
-          lengths for a Tentsile-style tree tent.
-        </p>
+      <header className="app-header">
+        <div className="app-header-text">
+          <h1>Tentsile Setup Calculator</h1>
+          <p className="subtitle">
+            Enter your candidate trees to check which 3-tree combination fits best and get strap
+            lengths for a Tentsile-style tree tent.
+          </p>
+        </div>
+        <TopMenu
+          locations={locations}
+          currentLocationId={currentLocationId}
+          onSelectLocation={setCurrentLocationId}
+          onAddLocation={addLocation}
+          onRemoveLocation={removeLocation}
+          onRenameLocation={renameLocation}
+          onExport={handleExport}
+          onImportFile={handleImportFile}
+          importError={importError}
+          settings={settings}
+          onSettingsChange={setSettings}
+        />
       </header>
       <UsageGuide />
-      <LocationSwitcher
-        locations={locations}
-        currentLocationId={currentLocationId}
-        onSelect={setCurrentLocationId}
-        onAdd={addLocation}
-        onRemove={removeLocation}
-        onRename={renameLocation}
-      />
       <main>
         <div className="grid-viz">
           {selected && selectedDiameters && (
@@ -224,7 +261,6 @@ export default function App() {
             onReferenceChange={handleReferenceChange}
             referenceError={referenceError}
             settings={settings}
-            onSettingsChange={setSettings}
             positionErrors={positionErrors}
           />
         </div>

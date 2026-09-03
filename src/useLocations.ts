@@ -114,6 +114,12 @@ export function useLocations() {
     setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)))
   }
 
+  /** Wholesale replace from an imported backup — selects the first imported location as current. */
+  const importLocations = (newLocations: Location[]) => {
+    setLocations(newLocations)
+    setCurrentLocationId(newLocations[0].id)
+  }
+
   return {
     locations,
     currentLocation,
@@ -123,5 +129,6 @@ export function useLocations() {
     addLocation,
     removeLocation,
     renameLocation,
+    importLocations,
   }
 }

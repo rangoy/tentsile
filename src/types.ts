@@ -95,6 +95,18 @@ export interface TreeReferences {
   b: number
 }
 
+/**
+ * One saved grove (a physical site with its own set of candidate trees).
+ * Tent/strap `Settings` are deliberately global, not per-location — they
+ * describe which tent you own, not where you're pitching it.
+ */
+export interface Location {
+  id: string
+  name: string
+  trees: TreeEntry[]
+  references: TreeReferences
+}
+
 /** A grove tree not part of the currently selected combo, positioned in that combo's local frame purely for display. */
 export interface OtherTreePoint {
   /** index into the trees array */

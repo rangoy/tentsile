@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { comboKey } from './components/ComboTabs'
 import { InputForm } from './components/InputForm'
+import { LocationSwitcher } from './components/LocationSwitcher'
 import { ResultsPanel } from './components/ResultsPanel'
 import { UsageGuide } from './components/UsageGuide'
 import { Visualization } from './components/Visualization'
-import { DEFAULT_REFERENCES, DEFAULT_SETTINGS, DEFAULT_TREES, isValidReferences, isValidSettings } from './constants'
+import { DEFAULT_SETTINGS, isValidSettings } from './constants'
 import {
   computeFloatingAnchor,
   projectOtherTrees,
@@ -13,6 +14,7 @@ import {
   solveFloatingAnchorTightness,
 } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
+import { useLocations } from './useLocations'
 import type { FloatingAnchorState, Settings, TreeEntry, TreeReferences } from './types'
 
 const DEFAULT_FLOATING_ANCHOR: FloatingAnchorState = {
@@ -23,13 +25,21 @@ const DEFAULT_FLOATING_ANCHOR: FloatingAnchorState = {
 }
 
 export default function App() {
-  const [trees, setTrees] = useLocalStorage<TreeEntry[]>('tentsile.trees', DEFAULT_TREES)
+  const {
+    locations,
+    currentLocation,
+    currentLocationId,
+    setCurrentLocationId,
+    updateCurrentLocation,
+    addLocation,
+    removeLocation,
+    renameLocation,
+  } = useLocations()
+  const trees = currentLocation.trees
+  const references = currentLocation.references
+  const setTrees = (next: TreeEntry[]) => updateCurrentLocation({ trees: next })
+  const setReferences = (next: TreeReferences) => updateCurrentLocation({ references: next })
   const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
-  const [references, setReferences] = useLocalStorage<TreeReferences>(
-    'tentsile.references',
-    DEFAULT_REFERENCES,
-    isValidReferences,
-  )
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
   const [floatingAnchorState, setFloatingAnchorState] = useState<FloatingAnchorState>(DEFAULT_FLOATING_ANCHOR)
@@ -162,6 +172,14 @@ export default function App() {
     if (solved) setFloatingAnchorState((prev) => ({ ...prev, ...solved }))
   }, [selected ? comboKey(selected) : null])
 
+  // A different location has its own trees/references entirely — carrying
+  // over a reference-change error or a floating-anchor redirect picked
+  // against the previous location's trees makes no sense once switched.
+  useEffect(() => {
+    setReferenceError(null)
+    setFloatingAnchorState(DEFAULT_FLOATING_ANCHOR)
+  }, [currentLocationId])
+
   return (
     <div className="app">
       <header>
@@ -172,6 +190,14 @@ export default function App() {
         </p>
       </header>
       <UsageGuide />
+      <LocationSwitcher
+        locations={locations}
+        currentLocationId={currentLocationId}
+        onSelect={setCurrentLocationId}
+        onAdd={addLocation}
+        onRemove={removeLocation}
+        onRename={renameLocation}
+      />
       <main>
         <div className="grid-viz">
           {selected && selectedDiameters && (

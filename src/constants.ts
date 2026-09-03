@@ -1,4 +1,4 @@
-import type { Settings, TentModel, TreeEntry, TreeReferences } from './types'
+import type { Location, Settings, TentModel, TreeEntry, TreeReferences } from './types'
 
 export const STINGRAY_SIDE = 4.1
 
@@ -82,4 +82,24 @@ export const DEFAULT_REFERENCES: TreeReferences = { a: 0, b: 1 }
 
 export function isValidReferences(value: TreeReferences): boolean {
   return typeof value.a === 'number' && typeof value.b === 'number' && value.a !== value.b
+}
+
+export function createLocation(
+  name: string,
+  trees: TreeEntry[] = DEFAULT_TREES,
+  references: TreeReferences = DEFAULT_REFERENCES,
+): Location {
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `loc-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return { id, name, trees, references }
+}
+
+export function isValidLocation(value: unknown): value is Location {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Location
+  return (
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    Array.isArray(v.trees) &&
+    isValidReferences(v.references)
+  )
 }

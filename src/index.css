@@ -476,6 +476,55 @@ main {
   cursor: not-allowed;
 }
 
+.location-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.location-switcher label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.location-name-input {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+}
+
+.location-button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.location-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.location-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.location-remove:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.12);
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
 .combo-tabs {
   display: flex;
   flex-wrap: wrap;

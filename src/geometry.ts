@@ -13,8 +13,10 @@ import type {
   TreeInputs,
   TreeLabels,
   TriangleSolution,
+  UnitSystem,
   VertexId,
 } from './types'
+import { formatDiameter, formatLength } from './units'
 
 export const ANGLE_OK_MAX = 80
 export const ANGLE_TIGHT_MAX = 100
@@ -295,6 +297,7 @@ function checkStatusRank(status: CheckResult['status']): number {
  * wording, one source of truth.
  */
 function strapCheck(id: string, label: string, reach: number, strap: number, settings: Settings): CheckResult {
+  const unit = settings.unitSystem
   const marginVsMax = (settings.strapMax - strap) / settings.strapMax
   const marginVsRatchet = settings.ratchetLength > 0 ? strap / settings.ratchetLength : Infinity
   const margin = Math.min(marginVsMax, marginVsRatchet)
@@ -305,8 +308,8 @@ function strapCheck(id: string, label: string, reach: number, strap: number, set
       status: 'fail',
       detail:
         settings.ratchetLength > 0
-          ? `${strap.toFixed(2)} m of strap needed (after the ${settings.ratchetLength.toFixed(2)} m ratchet), longer than your ${settings.strapMax.toFixed(1)} m strap.`
-          : `${reach.toFixed(2)} m needed, longer than your ${settings.strapMax.toFixed(1)} m strap.`,
+          ? `${formatLength(strap, unit)} of strap needed (after the ${formatLength(settings.ratchetLength, unit)} ratchet), longer than your ${formatLength(settings.strapMax, unit, 1)} strap.`
+          : `${formatLength(reach, unit)} needed, longer than your ${formatLength(settings.strapMax, unit, 1)} strap.`,
       margin,
     }
   }
@@ -315,7 +318,7 @@ function strapCheck(id: string, label: string, reach: number, strap: number, set
       id,
       label,
       status: 'tight',
-      detail: `Tree is closer than the ${settings.ratchetLength.toFixed(2)} m ratchet — use a basket loop (loop the strap directly around the tree, skipping the ratchet) instead.`,
+      detail: `Tree is closer than the ${formatLength(settings.ratchetLength, unit)} ratchet — use a basket loop (loop the strap directly around the tree, skipping the ratchet) instead.`,
       margin,
     }
   }
@@ -325,8 +328,8 @@ function strapCheck(id: string, label: string, reach: number, strap: number, set
     status: 'pass',
     detail:
       settings.ratchetLength > 0
-        ? `${strap.toFixed(2)} m of strap needed (${reach.toFixed(2)} m total reach).`
-        : `${reach.toFixed(2)} m needed.`,
+        ? `${formatLength(strap, unit)} of strap needed (${formatLength(reach, unit)} total reach).`
+        : `${formatLength(reach, unit)} needed.`,
     margin,
   }
 }
@@ -605,7 +608,7 @@ export function computeFit(
         id: edge.id,
         label: edge.label,
         status: 'fail',
-        detail: `${edge.dist.toFixed(2)} m exceeds the ${maxDist.toFixed(2)} m max reach with a ${settings.strapMax.toFixed(1)} m strap and ${settings.ratchetLength.toFixed(2)} m ratchet.`,
+        detail: `${formatLength(edge.dist, settings.unitSystem)} exceeds the ${formatLength(maxDist, settings.unitSystem)} max reach with a ${formatLength(settings.strapMax, settings.unitSystem, 1)} strap and ${formatLength(settings.ratchetLength, settings.unitSystem)} ratchet.`,
         margin,
       })
     } else if (edge.dist > maxDistNoRatchet) {
@@ -613,7 +616,7 @@ export function computeFit(
         id: edge.id,
         label: edge.label,
         status: 'tight',
-        detail: `${edge.dist.toFixed(2)} m relies on the ratchet's reach (max without it: ${maxDistNoRatchet.toFixed(2)} m, with it: ${maxDist.toFixed(2)} m).`,
+        detail: `${formatLength(edge.dist, settings.unitSystem)} relies on the ratchet's reach (max without it: ${formatLength(maxDistNoRatchet, settings.unitSystem)}, with it: ${formatLength(maxDist, settings.unitSystem)}).`,
         margin,
       })
     } else {
@@ -621,7 +624,7 @@ export function computeFit(
         id: edge.id,
         label: edge.label,
         status: 'pass',
-        detail: `${edge.dist.toFixed(2)} m (max reach ${maxDistNoRatchet.toFixed(2)} m).`,
+        detail: `${formatLength(edge.dist, settings.unitSystem)} (max reach ${formatLength(maxDistNoRatchet, settings.unitSystem)}).`,
         margin,
       })
     }
@@ -677,7 +680,7 @@ export function computeFit(
         id: trunk.id,
         label: trunk.label,
         status: 'fail',
-        detail: `${(trunk.value * 100).toFixed(0)} cm is below the recommended ${(MIN_TRUNK_DIAMETER * 100).toFixed(0)} cm minimum.`,
+        detail: `${formatDiameter(trunk.value * 100, settings.unitSystem)} is below the recommended ${formatDiameter(MIN_TRUNK_DIAMETER * 100, settings.unitSystem)} minimum.`,
         margin,
       })
     } else {
@@ -685,7 +688,7 @@ export function computeFit(
         id: trunk.id,
         label: trunk.label,
         status: 'pass',
-        detail: `${(trunk.value * 100).toFixed(0)} cm diameter.`,
+        detail: `${formatDiameter(trunk.value * 100, settings.unitSystem)} diameter.`,
         margin,
       })
     }
@@ -745,7 +748,7 @@ export function computeFit(
         id: fit.id,
         label: fit.label,
         status: 'pass',
-        detail: `${clearance.toFixed(2)} m of clearance before this corner would reach the tree.`,
+        detail: `${formatLength(clearance, settings.unitSystem)} of clearance before this corner would reach the tree.`,
         margin,
       })
     }
@@ -1195,6 +1198,7 @@ export function buildTreePositions(
   trees: TreeEntry[],
   refA = 0,
   refB = 1,
+  unit: UnitSystem = 'metric',
 ): {
   positions: Array<Point | null>
   errors: string[]
@@ -1232,7 +1236,7 @@ export function buildTreePositions(
     if (b + d0 <= d1 || b + d1 <= d0 || d0 + d1 <= b) {
       const baselineLabel = `${formatTreeDisplay(refA + 1, trees[refA].label)}-${formatTreeDisplay(refB + 1, trees[refB].label)}`
       errors.push(
-        `${display}: ${d0.toFixed(1)} m and ${d1.toFixed(1)} m don't form a valid triangle with the ${baselineLabel} baseline (${b.toFixed(1)} m).`,
+        `${display}: ${formatLength(d0, unit, 1)} and ${formatLength(d1, unit, 1)} don't form a valid triangle with the ${baselineLabel} baseline (${formatLength(b, unit, 1)}).`,
       )
       continue
     }
@@ -1349,7 +1353,7 @@ export function rankCombinations(
   totalEvaluated: number
   positions: Array<Point | null>
 } {
-  const { positions, errors } = buildTreePositions(trees, refA, refB)
+  const { positions, errors } = buildTreePositions(trees, refA, refB, settings.unitSystem)
   const combos: ComboResult[] = []
   // Only used to scale the grove-obstruction margin below, so an average across
   // the (possibly unequal, for an isosceles tent) 3 corner radii is fine here.
@@ -1385,6 +1389,7 @@ export function rankCombinations(
       [baseFit.cornerA, baseFit.cornerB, baseFit.cornerC],
       otherTrees,
       tentRadius,
+      settings.unitSystem,
     )
     const checks = [...baseFit.checks, obstructionCheck]
     const overallVerdict = checks.reduce<CheckResult['status']>(
@@ -1524,6 +1529,7 @@ export function checkGroveObstructions(
   corners: [Point, Point, Point],
   otherTrees: OtherTreePoint[],
   radius: number,
+  unit: UnitSystem,
 ): CheckResult {
   const label = 'Other trees clear of tent'
   if (otherTrees.length === 0) {
@@ -1556,7 +1562,7 @@ export function checkGroveObstructions(
     id: 'groveObstruction',
     label,
     status: 'pass',
-    detail: `Closest other tree (${worstDisplay}) has ${worstClearance.toFixed(2)} m clearance from the tent footprint.`,
+    detail: `Closest other tree (${worstDisplay}) has ${formatLength(worstClearance, unit)} clearance from the tent footprint.`,
     margin,
   }
 }

@@ -14,7 +14,7 @@ export default defineConfig({
         short_name: 'Tentsile Setup',
         description:
           'Check which 3-tree combination fits best for a Tentsile-style tree tent and get strap lengths for each corner.',
-        theme_color: '#3d6b3d',
+        theme_color: '#7fae6b',
         background_color: '#f6f5f1',
         display: 'standalone',
         start_url: '/tentsile/',

@@ -93,7 +93,9 @@ export function useLocations() {
 
   const currentLocation = locations.find((l) => l.id === currentLocationId) ?? locations[0]
 
-  const updateCurrentLocation = (patch: Partial<Pick<Location, 'trees' | 'references'>>) => {
+  const updateCurrentLocation = (
+    patch: Partial<Pick<Location, 'trees' | 'references' | 'mirrored' | 'flippedVertically'>>,
+  ) => {
     setLocations((prev) => prev.map((l) => (l.id === currentLocation.id ? { ...l, ...patch } : l)))
   }
 

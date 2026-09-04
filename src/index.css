@@ -702,6 +702,13 @@ main {
   border-color: var(--accent);
 }
 
+.viz-mirror-active {
+  opacity: 1;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .small-button {
   font: inherit;
   font-weight: 600;

@@ -105,6 +105,17 @@ export interface Location {
   name: string
   trees: TreeEntry[]
   references: TreeReferences
+  /**
+   * Distance-only trilateration can't tell a layout from its mirror image,
+   * and the app has no compass data either — it has to pick some arbitrary
+   * orientation (see solveTriangle/buildTreePositions in geometry.ts). These
+   * two flip the *displayed* diagram left-right and/or top-to-bottom to
+   * match how the user actually walked the site, without touching any of the
+   * underlying math (strap lengths, angles, checks are orientation-invariant).
+   * Optional/absent on locations saved before this existed — treat as false.
+   */
+  mirrored?: boolean
+  flippedVertically?: boolean
 }
 
 /** A grove tree not part of the currently selected combo, positioned in that combo's local frame purely for display. */

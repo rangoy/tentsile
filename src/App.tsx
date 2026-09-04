@@ -9,14 +9,15 @@ import { DEFAULT_SETTINGS, isValidSettings } from './constants'
 import { buildBackupPayload, parseBackupPayload } from './dataTransfer'
 import {
   computeFloatingAnchor,
-  projectOtherTrees,
+  formatTreeDisplay,
+  mapFitToFrame,
   rankCombinations,
   recomputeTreesForReferences,
   solveFloatingAnchorTightness,
 } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
 import { useLocations } from './useLocations'
-import type { FloatingAnchorState, Settings, TreeEntry, TreeReferences } from './types'
+import type { FloatingAnchorState, OtherTreePoint, Settings, TreeEntry, TreeReferences } from './types'
 
 const DEFAULT_FLOATING_ANCHOR: FloatingAnchorState = {
   enabled: false,
@@ -39,8 +40,18 @@ export default function App() {
   } = useLocations()
   const trees = currentLocation.trees
   const references = currentLocation.references
+  const mirrored = currentLocation.mirrored ?? false
+  const flippedVertically = currentLocation.flippedVertically ?? false
   const setTrees = (next: TreeEntry[]) => updateCurrentLocation({ trees: next })
   const setReferences = (next: TreeReferences) => updateCurrentLocation({ references: next })
+  // Cycles none -> mirrored -> flipped -> mirrored+flipped -> none, covering
+  // all 4 combinations of the two independent axis flips with one button.
+  const cycleOrientation = () => {
+    if (!mirrored && !flippedVertically) updateCurrentLocation({ mirrored: true, flippedVertically: false })
+    else if (mirrored && !flippedVertically) updateCurrentLocation({ mirrored: false, flippedVertically: true })
+    else if (!mirrored && flippedVertically) updateCurrentLocation({ mirrored: true, flippedVertically: true })
+    else updateCurrentLocation({ mirrored: false, flippedVertically: false })
+  }
   const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -55,10 +66,37 @@ export default function App() {
 
   const selected = combos.find((c) => comboKey(c) === selectedKey) ?? combos[0]
 
-  const otherTrees = useMemo(
-    () => (selected ? projectOtherTrees(trees, positions, selected.indices, selected.fit.triangle) : []),
-    [trees, positions, selected],
-  )
+  // Plotted straight from the grove's own shared positions (not re-projected per
+  // combo) so they — and the combo triangle itself, via stableFit below — stay
+  // visually put when switching combos, rather than the whole diagram reorienting
+  // arbitrarily each time (see mapFitToFrame's own comment for why that happened).
+  const otherTrees = useMemo(() => {
+    if (!selected) return []
+    const [i, j, k] = selected.indices
+    const result: OtherTreePoint[] = []
+    for (let idx = 0; idx < trees.length; idx++) {
+      if (idx === i || idx === j || idx === k) continue
+      const pos = positions[idx]
+      if (!pos) continue
+      result.push({ index: idx, display: formatTreeDisplay(idx + 1, trees[idx].label), pos, diameter: trees[idx].diameter })
+    }
+    return result
+  }, [trees, positions, selected])
+
+  // selected.fit is solved in its own arbitrary local frame (see mapFitToFrame) —
+  // remapped here into the grove's shared global frame so the displayed triangle
+  // lines up with otherTrees above and stays stable across combo switches. Falls
+  // back to the raw local fit only if a selected combo's own positions somehow
+  // aren't in `positions` (shouldn't happen — rankCombinations already skips any
+  // combo lacking them).
+  const stableFit = useMemo(() => {
+    if (!selected) return null
+    const [i, j, k] = selected.indices
+    const gA = positions[i]
+    const gB = positions[j]
+    const gC = positions[k]
+    return gA && gB && gC ? mapFitToFrame(selected.fit, gA, gB, gC) : selected.fit
+  }, [selected, positions])
 
   const selectedDiameters = selected
     ? {
@@ -72,9 +110,9 @@ export default function App() {
     otherTrees.find((t) => t.index === floatingAnchorState.redirectIndex) ?? otherTrees[0] ?? null
 
   const floatingAnchorResult = useMemo(() => {
-    if (!floatingAnchorState.enabled || !redirectTree || !selected || !selectedDiameters) return null
+    if (!floatingAnchorState.enabled || !redirectTree || !selected || !selectedDiameters || !stableFit) return null
     return computeFloatingAnchor(
-      selected.fit,
+      stableFit,
       floatingAnchorState.cornerId,
       redirectTree.pos,
       floatingAnchorState.tightness / 100,
@@ -82,7 +120,7 @@ export default function App() {
       settings,
       selected.labels,
     )
-  }, [floatingAnchorState, redirectTree, selected, selectedDiameters, settings])
+  }, [floatingAnchorState, redirectTree, selected, selectedDiameters, stableFit, settings])
 
   const handleRemoveTree = (index: number) => {
     setTrees(trees.filter((_, i) => i !== index))
@@ -147,11 +185,11 @@ export default function App() {
   // under them (caught from a screenshot showing the redirect tree and grab
   // point nowhere near the rest of the layout).
   const autoSolveFloatingAnchor = (cornerId: FloatingAnchorState['cornerId'], redirectIndexHint: number | null) => {
-    if (!selected || !selectedDiameters) return null
+    if (!selected || !selectedDiameters || !stableFit) return null
     const nextRedirectTree = otherTrees.find((t) => t.index === redirectIndexHint) ?? otherTrees[0] ?? null
     if (!nextRedirectTree) return null
     const tightness = solveFloatingAnchorTightness(
-      selected.fit,
+      stableFit,
       cornerId,
       nextRedirectTree.pos,
       { diameterA: selectedDiameters.A, diameterB: selectedDiameters.B, diameterC: selectedDiameters.C },
@@ -239,9 +277,9 @@ export default function App() {
       <UsageGuide />
       <main>
         <div className="grid-viz">
-          {selected && selectedDiameters && (
+          {selected && selectedDiameters && stableFit && (
             <Visualization
-              fit={selected.fit}
+              fit={stableFit}
               diameters={selectedDiameters}
               labels={selected.labels}
               comboIndices={selected.indices}
@@ -253,6 +291,9 @@ export default function App() {
               unitSystem={settings.unitSystem}
               floatingAnchor={floatingAnchorResult && redirectTree ? { result: floatingAnchorResult, redirectTree } : null}
               focusedEdit={focusedEdit}
+              mirrored={mirrored}
+              flippedVertically={flippedVertically}
+              onCycleOrientation={cycleOrientation}
             />
           )}
         </div>
@@ -270,9 +311,9 @@ export default function App() {
           />
         </div>
         <div className="grid-results">
-          {selected && selectedDiameters && (
+          {selected && selectedDiameters && stableFit && (
             <ResultsPanel
-              fit={selected.fit}
+              fit={stableFit}
               labels={selected.labels}
               ratchetLength={settings.ratchetLength}
               unitSystem={settings.unitSystem}

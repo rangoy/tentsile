@@ -1447,12 +1447,50 @@ function buildFrameMapper(
 
   const sourceAngle = Math.atan2(sourceB.y - sourceA.y, sourceB.x - sourceA.x)
   const targetAngle = Math.atan2(targetB.y - targetA.y, targetB.x - targetA.x)
-  const theta = targetAngle - sourceAngle
+  // rotate() runs BEFORE mirrorPoint() below, and mirroring (negating y) negates
+  // whatever angle rotation just produced — so reaching targetAngle after a
+  // mirror means rotating to *its negation* first, not to targetAngle itself.
+  // Only when the target's own B happens to sit at angle 0 (solveTriangle's own
+  // canonical frame, always true for the projectOtherTrees call site) does this
+  // collapse to the same value either way, which is why testing only that call
+  // site never caught this.
+  const theta = mirror ? -targetAngle - sourceAngle : targetAngle - sourceAngle
 
   return (p: Point): Point => {
     const relative = { x: p.x - sourceA.x, y: p.y - sourceA.y }
     const local = mirrorPoint(rotate(relative, theta))
     return { x: local.x + targetA.x, y: local.y + targetA.y }
+  }
+}
+
+/**
+ * Re-expresses `fit`'s corner/center/triangle points in a different frame,
+ * given where its own local A/B/C should land there. solveTriangle always
+ * anchors its solved "A" at its own origin and "B" along its own +x axis,
+ * unrelated to any other frame's orientation — every combo's fit is
+ * independently solved that way, so switching combos otherwise reorients
+ * the whole diagram arbitrarily. Mapping every combo's fit into one shared
+ * frame (the grove's own global positions from buildTreePositions) instead
+ * keeps the displayed layout visually stable across combo switches, so
+ * different combos can actually be compared by eye.
+ *
+ * A no-op for any purely relative computation done on the result afterward
+ * — computeFloatingAnchor in particular only ever uses distances plus its
+ * own frame's A/B/C, so it works identically fed either the original local
+ * fit or this remapped one, as long as everything passed alongside it (e.g.
+ * a redirect tree's position) is expressed in that same frame.
+ */
+export function mapFitToFrame(fit: FitResult, targetA: Point, targetB: Point, targetC: Point): FitResult {
+  if (!fit.triangle.valid) return fit
+  const { A, B, C } = fit.triangle
+  const mapToFrame = buildFrameMapper(A, B, C, targetA, targetB, targetC)
+  return {
+    ...fit,
+    center: mapToFrame(fit.center),
+    cornerA: mapToFrame(fit.cornerA),
+    cornerB: mapToFrame(fit.cornerB),
+    cornerC: mapToFrame(fit.cornerC),
+    triangle: { ...fit.triangle, A: targetA, B: targetB, C: targetC },
   }
 }
 

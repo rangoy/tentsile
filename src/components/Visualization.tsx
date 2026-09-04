@@ -31,6 +31,10 @@ interface Props {
   floatingAnchor?: { result: FloatingAnchorResult; redirectTree: OtherTreePoint } | null
   /** the two trees (by index into the trees array) behind whichever distance field is currently focused in the input table, or null when nothing's focused — see InputForm */
   focusedEdit?: { a: number; b: number } | null
+  /** flips the diagram left-right and/or top-to-bottom to match how the user actually walked the site — see the Location.mirrored/flippedVertically doc comment in types.ts */
+  mirrored: boolean
+  flippedVertically: boolean
+  onCycleOrientation: () => void
 }
 
 const WIDTH = 640
@@ -76,6 +80,9 @@ export function Visualization({
   unitSystem,
   floatingAnchor,
   focusedEdit,
+  mirrored,
+  flippedVertically,
+  onCycleOrientation,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
@@ -97,15 +104,17 @@ export function Visualization({
   // overlay on top of the un-redirected fit. The 3 real trees (A/B/C) never move either way.
   const activeFit = floatingAnchor?.result.fit.triangle.valid ? floatingAnchor.result.fit : fit
   const { cornerA, cornerB, cornerC } = activeFit
+  // Deliberately just the grove's own (now stable-frame, see App.tsx's stableFit) trees —
+  // NOT the tent corners or a floating-anchor grab point. Those vary in size/position with
+  // whichever combo or redirect is selected, so including them in the auto-fit extent below
+  // would keep reshuffling the view's pan/zoom on every switch, defeating the whole point of
+  // a shared frame: trees at the same screen position regardless of what's selected, so
+  // different combos/settings can actually be compared by eye.
   const points = [
     A,
     B,
     C,
-    cornerA,
-    cornerB,
-    cornerC,
     ...otherTrees.map((t) => t.pos),
-    ...(floatingAnchor ? [floatingAnchor.result.virtualPoint] : []),
   ]
 
   const xExtent = d3.extent(points, (p) => p.x) as [number, number]
@@ -119,11 +128,11 @@ export function Visualization({
   const xScale = d3
     .scaleLinear()
     .domain([cx - WIDTH / 2 / k, cx + WIDTH / 2 / k])
-    .range([0, WIDTH])
+    .range(mirrored ? [WIDTH, 0] : [0, WIDTH])
   const yScale = d3
     .scaleLinear()
     .domain([cy - HEIGHT / 2 / k, cy + HEIGHT / 2 / k])
-    .range([HEIGHT, 0])
+    .range(flippedVertically ? [0, HEIGHT] : [HEIGHT, 0])
 
   const project = (p: Point) => ({ x: xScale(p.x), y: yScale(p.y) })
 
@@ -509,8 +518,13 @@ export function Visualization({
           let bisector = (a1 + a2) / 2
           if (Math.cos(a1 - bisector) < 0) bisector += Math.PI
           const labelOffset = 26
-          const lx = Math.cos(bisector) * labelOffset
-          const ly = -Math.sin(bisector) * labelOffset
+          // project() already accounts for the y-axis flip between world (y-up) and
+          // screen (y-down) coords via yScale's own reversed range — ly below mirrors
+          // that. When mirrored, xScale's range is reversed the same way, so this
+          // offset (computed from the world-space bisector, not run through project())
+          // needs the same sign flip to still point away from the vertex on screen.
+          const lx = (mirrored ? -1 : 1) * Math.cos(bisector) * labelOffset
+          const ly = (flippedVertically ? 1 : -1) * Math.sin(bisector) * labelOffset
           return (
             <ScreenSpace at={p} zoomScale={scale} key={angle.id}>
               <text
@@ -533,6 +547,33 @@ export function Visualization({
           </g>
         </svg>
         <div className="viz-controls">
+          {(() => {
+            // Distances (and no compass) can't pin down a layout's true left-right or
+            // top-to-bottom orientation — one button cycles through all 4 combinations
+            // of the two independent flips so the diagram can be made to match how the
+            // user actually walked the site.
+            const icon = mirrored && flippedVertically ? '⤡' : flippedVertically ? '⇅' : '⇋'
+            const label =
+              mirrored && flippedVertically
+                ? 'Flip: mirrored + flipped vertically — click to reset'
+                : flippedVertically
+                  ? 'Flip: flipped vertically — click to mirror + flip'
+                  : mirrored
+                    ? 'Flip: mirrored left-right — click to flip vertically instead'
+                    : 'Flip: none — click to mirror left-right'
+            return (
+              <button
+                type="button"
+                onClick={onCycleOrientation}
+                aria-label={label}
+                aria-pressed={mirrored || flippedVertically}
+                title={label}
+                className={mirrored || flippedVertically ? 'viz-mirror-button viz-mirror-active' : 'viz-mirror-button'}
+              >
+                {icon}
+              </button>
+            )
+          })()}
           <button type="button" onClick={zoomOut} aria-label="Zoom out">
             −
           </button>
@@ -561,7 +602,10 @@ export function Visualization({
           purple circle marks the grab point, and the dotted purple line is the second strap segment
           between them; the tent shown reflects that redirected placement while it's active. Pink =
           the distance and the two trees for whichever field is focused in the tree table below.
-          Scroll/pinch to zoom, drag to pan, or use the +/− controls.
+          Scroll/pinch to zoom, drag to pan, or use the +/− controls. Distances alone (no compass)
+          can't pin down a layout's true left-right or top-to-bottom orientation, so the ⇋/⇅/⤡
+          button cycles the whole diagram through mirrored, flipped vertically, and both — use it
+          if the drawing comes out backwards from how you actually walked the site.
         </p>
       </details>
     </div>

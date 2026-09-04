@@ -90,7 +90,7 @@ export function createLocation(
   references: TreeReferences = DEFAULT_REFERENCES,
 ): Location {
   const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `loc-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  return { id, name, trees, references }
+  return { id, name, trees, references, mirrored: false, flippedVertically: false }
 }
 
 export function isValidLocation(value: unknown): value is Location {

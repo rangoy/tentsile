@@ -19,6 +19,8 @@ interface Props {
   fit: FitResult
   diameters: { A: number | null; B: number | null; C: number | null }
   labels: TreeLabels
+  /** indices into the trees array for the currently selected combo's A/B/C — lets focusedEdit resolve either a combo tree or an otherTrees tree to a position */
+  comboIndices: readonly [number, number, number]
   otherTrees: OtherTreePoint[]
   combos: ComboResult[]
   selectedKey: string
@@ -27,6 +29,8 @@ interface Props {
   unitSystem: UnitSystem
   /** when set, the redirected corner draws as two segments (to the grab point, then to the redirect tree) instead of one straight strap — see FloatingAnchor.tsx */
   floatingAnchor?: { result: FloatingAnchorResult; redirectTree: OtherTreePoint } | null
+  /** the two trees (by index into the trees array) behind whichever distance field is currently focused in the input table, or null when nothing's focused — see InputForm */
+  focusedEdit?: { a: number; b: number } | null
 }
 
 const WIDTH = 640
@@ -34,13 +38,14 @@ const HEIGHT = 480
 const PADDING = 56
 const MIN_TREE_RADIUS_PX = 7
 const MAX_TREE_RADIUS_PX = 22
-const RATCHET_COLOR = '#e08214'
-const REDIRECT_COLOR = '#8e44ad'
+const RATCHET_COLOR = 'var(--viz-ratchet)'
+const REDIRECT_COLOR = 'var(--viz-redirect)'
+const HIGHLIGHT_COLOR = 'var(--viz-highlight)'
 
 const STATUS_COLOR: Record<CheckStatus, string> = {
-  pass: '#2e8b57',
-  tight: '#d98e04',
-  fail: '#c0392b',
+  pass: 'var(--viz-status-pass)',
+  tight: 'var(--viz-status-tight)',
+  fail: 'var(--viz-status-fail)',
 }
 
 function angleBetween(center: Point, p: Point): number {
@@ -62,6 +67,7 @@ export function Visualization({
   fit,
   diameters,
   labels,
+  comboIndices,
   otherTrees,
   combos,
   selectedKey,
@@ -69,6 +75,7 @@ export function Visualization({
   ratchetLength,
   unitSystem,
   floatingAnchor,
+  focusedEdit,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
@@ -176,6 +183,22 @@ export function Visualization({
     { id: 'angleC', pos: C, other1: A, other2: B, value: activeFit.triangle.angleC },
   ]
 
+  // Resolves any tree in the grove (by index into the trees array) to its
+  // real position in this diagram's frame — either one of the 3 selected
+  // combo trees (A/B/C) or one of the projected otherTrees dots. Used only by
+  // the focused-edit highlight below, which can point at either kind.
+  const indexToPoint = (index: number): Point | null => {
+    const comboSlot = comboIndices.indexOf(index)
+    if (comboSlot === 0) return A
+    if (comboSlot === 1) return B
+    if (comboSlot === 2) return C
+    return otherTrees.find((t) => t.index === index)?.pos ?? null
+  }
+
+  const focusedPoints = focusedEdit
+    ? ([indexToPoint(focusedEdit.a), indexToPoint(focusedEdit.b)] as const)
+    : null
+
   return (
     <div className="panel">
       <ComboTabs combos={combos} selectedKey={selectedKey} onSelect={onSelectCombo} />
@@ -206,7 +229,24 @@ export function Visualization({
           )
         })}
 
-        <path d={tentPath} fill="rgba(80,120,200,0.12)" stroke="#4a68c4" strokeWidth={2} strokeDasharray="6 5" />
+        <path d={tentPath} fill="var(--viz-tent-fill)" stroke="var(--viz-tent-stroke)" strokeWidth={2} strokeDasharray="6 5" />
+
+        {focusedPoints && focusedPoints[0] && focusedPoints[1] && (() => {
+          const p1 = project(focusedPoints[0])
+          const p2 = project(focusedPoints[1])
+          return (
+            <line
+              x1={p1.x}
+              y1={p1.y}
+              x2={p2.x}
+              y2={p2.y}
+              stroke={HIGHLIGHT_COLOR}
+              strokeWidth={4}
+              strokeLinecap="round"
+              opacity={0.85}
+            />
+          )
+        })()}
 
         {trees.map((tree) => {
           const centerPx = project(activeFit.center)
@@ -218,7 +258,7 @@ export function Visualization({
               y1={centerPx.y}
               x2={cornerPx.x}
               y2={cornerPx.y}
-              stroke="#888"
+              stroke="var(--viz-spoke)"
               strokeWidth={1.5}
               strokeDasharray="4 3"
             />
@@ -227,7 +267,7 @@ export function Visualization({
 
         {(() => {
           const centerPx = project(activeFit.center)
-          return <circle cx={centerPx.x} cy={centerPx.y} r={3} fill="#888" />
+          return <circle cx={centerPx.x} cy={centerPx.y} r={3} fill="var(--viz-spoke)" />
         })()}
 
         {trees.map((tree) => {
@@ -294,15 +334,15 @@ export function Visualization({
                     const labelWidth = 24 + label.length * 5.4
                     return (
                       <>
-                        <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="white" opacity={0.85} rx={3} />
-                        <text x={0} y={4} textAnchor="middle" fontSize={13} fill="#333">
+                        <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="var(--viz-bg)" opacity={0.85} rx={3} />
+                        <text x={0} y={4} textAnchor="middle" fontSize={13} fill="var(--viz-ink)">
                           {label}
                         </text>
                       </>
                     )
                   })()}
                 </ScreenSpace>
-                <circle cx={grabPx.x} cy={grabPx.y} r={5} fill="white" stroke={REDIRECT_COLOR} strokeWidth={2.5} />
+                <circle cx={grabPx.x} cy={grabPx.y} r={5} fill="var(--viz-bg)" stroke={REDIRECT_COLOR} strokeWidth={2.5} />
                 {segments.map((seg) => {
                   const mid = { x: (seg.from.x + seg.to.x) / 2, y: (seg.from.y + seg.to.y) / 2 }
                   const labelWidth = 24 + seg.label.length * 5.4
@@ -310,7 +350,7 @@ export function Visualization({
                     <g key={seg.key}>
                       <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke={seg.color} strokeWidth={2} strokeDasharray="1 4" />
                       <ScreenSpace at={mid} zoomScale={scale}>
-                        <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="white" opacity={0.85} rx={3} />
+                        <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="var(--viz-bg)" opacity={0.85} rx={3} />
                         <text x={0} y={4} textAnchor="middle" fontSize={13} fill={seg.color}>
                           {seg.label}
                         </text>
@@ -353,8 +393,8 @@ export function Visualization({
                 strokeDasharray="2 4"
               />
               <ScreenSpace at={mid} zoomScale={scale}>
-                <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="white" opacity={0.85} rx={3} />
-                <text x={0} y={4} textAnchor="middle" fontSize={13} fill="#333">
+                <rect x={-labelWidth / 2} y={-10} width={labelWidth} height={19} fill="var(--viz-bg)" opacity={0.85} rx={3} />
+                <text x={0} y={4} textAnchor="middle" fontSize={13} fill="var(--viz-ink)">
                   {label}
                 </text>
               </ScreenSpace>
@@ -374,9 +414,9 @@ export function Visualization({
               cx={p.x}
               cy={p.y}
               r={radiusPx}
-              fill="#5a3d1e"
-              stroke="#2e2010"
-              strokeWidth={1}
+              fill="var(--viz-trunk)"
+              stroke="var(--viz-bg)"
+              strokeWidth={2}
             />
           )
         })}
@@ -385,7 +425,18 @@ export function Visualization({
           const p = project(tree.pos)
           return (
             <ScreenSpace at={p} zoomScale={scale} key={`tree-label-${tree.id}`}>
-              <text x={0} y={-16} textAnchor="middle" fontSize={15} fontWeight={600}>
+              <text
+                x={0}
+                y={-16}
+                textAnchor="middle"
+                fontSize={15}
+                fontWeight={600}
+                fill="var(--viz-ink)"
+                stroke="var(--viz-bg)"
+                strokeWidth={3}
+                strokeLinejoin="round"
+                paintOrder="stroke"
+              >
                 {labels[tree.id]}
               </text>
             </ScreenSpace>
@@ -407,9 +458,9 @@ export function Visualization({
                 cx={p.x}
                 cy={p.y}
                 r={MIN_TREE_RADIUS_PX}
-                fill={colliding ? '#c0392b' : '#9c9c94'}
-                stroke={colliding ? '#7a2318' : '#6b6b63'}
-                strokeWidth={1}
+                fill={colliding ? 'var(--viz-status-fail)' : 'var(--viz-other-tree)'}
+                stroke="var(--viz-bg)"
+                strokeWidth={1.5}
               />
               <ScreenSpace at={p} zoomScale={scale}>
                 <text
@@ -418,7 +469,11 @@ export function Visualization({
                   textAnchor="middle"
                   fontSize={13}
                   fontWeight={colliding || isRedirectTree ? 700 : 400}
-                  fill={colliding ? '#c0392b' : isRedirectTree ? REDIRECT_COLOR : '#6b6b63'}
+                  fill={colliding ? 'var(--viz-status-fail)' : isRedirectTree ? REDIRECT_COLOR : 'var(--viz-other-tree)'}
+                  stroke="var(--viz-bg)"
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                  paintOrder="stroke"
                 >
                   {tree.display}
                   {colliding ? ' ⚠' : ''}
@@ -427,6 +482,24 @@ export function Visualization({
             </g>
           )
         })}
+
+        {focusedEdit &&
+          [focusedEdit.a, focusedEdit.b].map((idx) => {
+            const pos = indexToPoint(idx)
+            if (!pos) return null
+            const p = project(pos)
+            return (
+              <circle
+                key={`focus-ring-${idx}`}
+                cx={p.x}
+                cy={p.y}
+                r={MAX_TREE_RADIUS_PX + 6}
+                fill="none"
+                stroke={HIGHLIGHT_COLOR}
+                strokeWidth={3}
+              />
+            )
+          })}
 
         {angleLabels.map((angle) => {
           const p = project(angle.pos)
@@ -447,6 +520,10 @@ export function Visualization({
                 fontSize={13}
                 fill={STATUS_COLOR[checkStatus[angle.id] ?? 'pass']}
                 fontWeight={600}
+                stroke="var(--viz-bg)"
+                strokeWidth={3}
+                strokeLinejoin="round"
+                paintOrder="stroke"
               >
                 {angle.value.toFixed(0)}°
               </text>
@@ -482,8 +559,9 @@ export function Visualization({
           gray center line, the tighter/more even the pitch. Purple = a 4th tree redirect (see "4th
           tree redirect" below the results, if enabled) — a purple ring marks the redirect tree, a
           purple circle marks the grab point, and the dotted purple line is the second strap segment
-          between them; the tent shown reflects that redirected placement while it's active. Scroll/pinch
-          to zoom, drag to pan, or use the +/− controls.
+          between them; the tent shown reflects that redirected placement while it's active. Pink =
+          the distance and the two trees for whichever field is focused in the tree table below.
+          Scroll/pinch to zoom, drag to pan, or use the +/− controls.
         </p>
       </details>
     </div>

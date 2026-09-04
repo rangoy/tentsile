@@ -6,6 +6,26 @@
   --text: #22261f;
   --border: #ddd8cc;
   --accent: #3d6b3d;
+
+  /* Visualization palette — deliberately its own fixed, always-bright "paper"
+     canvas rather than following the app's light/dark theme: a busy diagram
+     of thin colored lines and small markers needs consistent, well-tested
+     contrast against one known background, not two (and dark-mode users
+     still get a bright, legible drawing instead of a low-contrast one). */
+  --viz-bg: #fbfaf6;
+  --viz-grid: rgba(90, 86, 70, 0.07);
+  --viz-ink: #22261f;
+  --viz-trunk: #6b4526;
+  --viz-other-tree: #8f887a;
+  --viz-spoke: #8a8578;
+  --viz-tent-fill: rgba(66, 98, 196, 0.14);
+  --viz-tent-stroke: #3d5bb0;
+  --viz-status-pass: #2e8b57;
+  --viz-status-tight: #c98600;
+  --viz-status-fail: #c0392b;
+  --viz-redirect: #8e44ad;
+  --viz-ratchet: #d97b06;
+  --viz-highlight: #d6006f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -633,10 +653,11 @@ main {
   width: 100%;
   height: auto;
   display: block;
-  background: repeating-linear-gradient(
+  background-color: var(--viz-bg);
+  background-image: repeating-linear-gradient(
     0deg,
-    rgba(128, 128, 128, 0.05),
-    rgba(128, 128, 128, 0.05) 1px,
+    var(--viz-grid),
+    var(--viz-grid) 1px,
     transparent 1px,
     transparent 40px
   );

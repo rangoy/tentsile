@@ -19,6 +19,8 @@ interface Props {
   referenceError: string | null
   settings: Settings
   positionErrors: string[]
+  /** reports which two trees (by index) the currently-focused distance field connects, or null on blur — lets the Visualization highlight that edge — see App.tsx */
+  onFocusEdit: (edit: { a: number; b: number } | null) => void
 }
 
 function numberOrNull(raw: string): number | null {
@@ -40,6 +42,7 @@ export function InputForm({
   referenceError,
   settings,
   positionErrors,
+  onFocusEdit,
 }: Props) {
   const updateTree = (index: number, patch: Partial<TreeEntry>) => {
     onTreesChange(trees.map((t, i) => (i === index ? { ...t, ...patch } : t)))
@@ -154,6 +157,8 @@ export function InputForm({
                         step={0.1}
                         value={toDisplayLen(tree.distToFirst)}
                         onChange={(n) => updateTree(index, { distToFirst: fromDisplayLen(n) })}
+                        onFocus={() => onFocusEdit({ a: references.a, b: index })}
+                        onBlur={() => onFocusEdit(null)}
                       />
                     )}
                   </td>
@@ -166,6 +171,8 @@ export function InputForm({
                         step={0.1}
                         value={toDisplayLen(tree.distToSecond)}
                         onChange={(n) => updateTree(index, { distToSecond: fromDisplayLen(n) })}
+                        onFocus={() => onFocusEdit({ a: references.b, b: index })}
+                        onBlur={() => onFocusEdit(null)}
                       />
                     )}
                   </td>

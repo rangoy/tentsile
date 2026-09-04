@@ -46,6 +46,7 @@ export default function App() {
   const [importError, setImportError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
   const [floatingAnchorState, setFloatingAnchorState] = useState<FloatingAnchorState>(DEFAULT_FLOATING_ANCHOR)
+  const [focusedEdit, setFocusedEdit] = useState<{ a: number; b: number } | null>(null)
 
   const { combos, positionErrors, positions } = useMemo(
     () => rankCombinations(trees, settings, 5, references.a, references.b),
@@ -208,6 +209,7 @@ export default function App() {
   useEffect(() => {
     setReferenceError(null)
     setFloatingAnchorState(DEFAULT_FLOATING_ANCHOR)
+    setFocusedEdit(null)
   }, [currentLocationId])
 
   return (
@@ -242,6 +244,7 @@ export default function App() {
               fit={selected.fit}
               diameters={selectedDiameters}
               labels={selected.labels}
+              comboIndices={selected.indices}
               otherTrees={otherTrees}
               combos={combos}
               selectedKey={comboKey(selected)}
@@ -249,6 +252,7 @@ export default function App() {
               ratchetLength={settings.ratchetLength}
               unitSystem={settings.unitSystem}
               floatingAnchor={floatingAnchorResult && redirectTree ? { result: floatingAnchorResult, redirectTree } : null}
+              focusedEdit={focusedEdit}
             />
           )}
         </div>
@@ -260,6 +264,7 @@ export default function App() {
             references={references}
             onReferenceChange={handleReferenceChange}
             referenceError={referenceError}
+            onFocusEdit={setFocusedEdit}
             settings={settings}
             positionErrors={positionErrors}
           />

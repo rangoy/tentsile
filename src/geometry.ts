@@ -1451,7 +1451,7 @@ function buildFrameMapper(
 
   return (p: Point): Point => {
     const relative = { x: p.x - sourceA.x, y: p.y - sourceA.y }
-    const local = mirrorPoint(rotate(relative, -theta))
+    const local = mirrorPoint(rotate(relative, theta))
     return { x: local.x + targetA.x, y: local.y + targetA.y }
   }
 }

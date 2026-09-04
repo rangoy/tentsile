@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#3d6b3d"/>
+  <!-- three trees -->
+  <g stroke="#f6f5f1" stroke-width="14" stroke-linecap="round">
+    <line x1="120" y1="410" x2="120" y2="150"/>
+    <line x1="392" y1="410" x2="392" y2="150"/>
+    <line x1="256" y1="410" x2="256" y2="90"/>
+  </g>
+  <g fill="#f6f5f1">
+    <circle cx="120" cy="130" r="34"/>
+    <circle cx="392" cy="130" r="34"/>
+    <circle cx="256" cy="70" r="40"/>
+  </g>
+  <!-- tent (triangle) suspended between the trees -->
+  <path d="M256 230 L392 400 L120 400 Z" fill="#f6f5f1" fill-opacity="0.95"/>
+  <path d="M256 230 L336 400 L176 400 Z" fill="#3d6b3d"/>
+</svg>

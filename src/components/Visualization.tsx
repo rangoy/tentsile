@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { useRef, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import type {
   ComboResult,
   CheckStatus,
@@ -35,6 +35,10 @@ interface Props {
   mirrored: boolean
   flippedVertically: boolean
   onCycleOrientation: () => void
+  /** drag a tree marker (either a combo A/B/C tree or an otherTrees dot) to a new grove position — index is into the grove's trees array */
+  onTreeMove: (index: number, pos: Point) => void
+  /** tap/click empty canvas to add a new tree at that grove position */
+  onAddTreeAt: (pos: Point) => void
 }
 
 const WIDTH = 640
@@ -83,10 +87,41 @@ export function Visualization({
   mirrored,
   flippedVertically,
   onCycleOrientation,
+  onTreeMove,
+  onAddTreeAt,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
   const { transform, scale, handlers, zoomIn, zoomOut, reset, isDefault } = useZoomPan(svgRef, selectedKey)
+
+  // The <g> that carries the pan/zoom transform — children are positioned in
+  // "content space" (the same space project() outputs into). Converting a
+  // screen point through *this* element's own CTM (rather than the root
+  // <svg>'s, which useZoomPan's toSvgPoint uses) lands directly in content
+  // space, pan/zoom already undone, without needing the raw camera x/y/scale.
+  const contentGroupRef = useRef<SVGGElement>(null)
+  const toContentPoint = (clientX: number, clientY: number): Point => {
+    const g = contentGroupRef.current
+    const ctm = g?.getScreenCTM()
+    const svg = g?.ownerSVGElement
+    if (!g || !ctm || !svg) return { x: 0, y: 0 }
+    const point = svg.createSVGPoint()
+    point.x = clientX
+    point.y = clientY
+    const transformed = point.matrixTransform(ctm.inverse())
+    return { x: transformed.x, y: transformed.y }
+  }
+
+  // Dragging a tree moves its point, which would otherwise shift the auto-fit
+  // extent (see `points` below) on every move — freezing the scale used for
+  // the view for the duration of one drag keeps the rest of the diagram still
+  // instead of jumping around under the pointer.
+  const [isDragging, setIsDragging] = useState(false)
+  const dragIndexRef = useRef<number | null>(null)
+  const frozenScaleRef = useRef<{ xScale: d3.ScaleLinear<number, number>; yScale: d3.ScaleLinear<number, number> } | null>(
+    null,
+  )
+  const clickStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null)
 
   if (!triangle.valid) {
     return (
@@ -125,16 +160,66 @@ export function Visualization({
   const cx = (xExtent[0] + xExtent[1]) / 2
   const cy = (yExtent[0] + yExtent[1]) / 2
 
-  const xScale = d3
+  const freshXScale = d3
     .scaleLinear()
     .domain([cx - WIDTH / 2 / k, cx + WIDTH / 2 / k])
     .range(mirrored ? [WIDTH, 0] : [0, WIDTH])
-  const yScale = d3
+  const freshYScale = d3
     .scaleLinear()
     .domain([cy - HEIGHT / 2 / k, cy + HEIGHT / 2 / k])
     .range(flippedVertically ? [0, HEIGHT] : [HEIGHT, 0])
 
+  // Mid-drag, keep using whatever scale was current when the drag started
+  // (see frozenScaleRef above) instead of the fresh one, which would
+  // otherwise shift out from under the pointer as the dragged tree moves.
+  const xScale = isDragging && frozenScaleRef.current ? frozenScaleRef.current.xScale : freshXScale
+  const yScale = isDragging && frozenScaleRef.current ? frozenScaleRef.current.yScale : freshYScale
+
   const project = (p: Point) => ({ x: xScale(p.x), y: yScale(p.y) })
+
+  const startTreeDrag = (index: number) => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // ignore — same rationale as useZoomPan's own setPointerCapture call
+    }
+    frozenScaleRef.current = { xScale: freshXScale, yScale: freshYScale }
+    dragIndexRef.current = index
+    setIsDragging(true)
+  }
+  const moveTreeDrag = (e: React.PointerEvent) => {
+    if (dragIndexRef.current === null) return
+    e.stopPropagation()
+    const content = toContentPoint(e.clientX, e.clientY)
+    onTreeMove(dragIndexRef.current, { x: xScale.invert(content.x), y: yScale.invert(content.y) })
+  }
+  const endTreeDrag = (e: React.PointerEvent) => {
+    if (dragIndexRef.current === null) return
+    e.stopPropagation()
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
+    dragIndexRef.current = null
+    frozenScaleRef.current = null
+    setIsDragging(false)
+  }
+
+  const handleCanvasPointerDown = (e: React.PointerEvent<SVGRectElement>) => {
+    if (!e.isPrimary) return
+    clickStartRef.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId }
+  }
+  const CLICK_MOVE_THRESHOLD_PX = 6
+  const handleCanvasPointerUp = (e: React.PointerEvent<SVGRectElement>) => {
+    const start = clickStartRef.current
+    clickStartRef.current = null
+    if (!start || start.pointerId !== e.pointerId) return
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_MOVE_THRESHOLD_PX) return
+    const content = toContentPoint(e.clientX, e.clientY)
+    onAddTreeAt({ x: freshXScale.invert(content.x), y: freshYScale.invert(content.y) })
+  }
 
   const lineGen = d3
     .line<Point>()
@@ -152,6 +237,7 @@ export function Visualization({
   const trees = [
     {
       id: 'A',
+      index: comboIndices[0],
       pos: A,
       corner: cornerA,
       diameter: diameters.A ?? DEFAULT_TRUNK_DIAMETER,
@@ -160,6 +246,7 @@ export function Visualization({
     },
     {
       id: 'B',
+      index: comboIndices[1],
       pos: B,
       corner: cornerB,
       diameter: diameters.B ?? DEFAULT_TRUNK_DIAMETER,
@@ -168,6 +255,7 @@ export function Visualization({
     },
     {
       id: 'C',
+      index: comboIndices[2],
       pos: C,
       corner: cornerC,
       diameter: diameters.C ?? DEFAULT_TRUNK_DIAMETER,
@@ -218,10 +306,22 @@ export function Visualization({
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           className="viz-svg"
           role="img"
-          aria-label="Tree and tent layout — scroll or pinch to zoom, drag to pan"
+          aria-label="Tree and tent layout — scroll or pinch to zoom, drag to pan, drag a tree to reposition it, tap empty space to add one"
           {...handlers}
         >
-          <g transform={transform}>
+          <g transform={transform} ref={contentGroupRef}>
+        <rect
+          x={0}
+          y={0}
+          width={WIDTH}
+          height={HEIGHT}
+          fill="transparent"
+          onPointerDown={handleCanvasPointerDown}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={() => {
+            clickStartRef.current = null
+          }}
+        />
         {edges.map((edge) => {
           const p1 = project(edge.from)
           const p2 = project(edge.to)
@@ -238,7 +338,14 @@ export function Visualization({
           )
         })}
 
-        <path d={tentPath} fill="var(--viz-tent-fill)" stroke="var(--viz-tent-stroke)" strokeWidth={2} strokeDasharray="6 5" />
+        <path
+          d={tentPath}
+          fill="var(--viz-tent-fill)"
+          stroke="var(--viz-tent-stroke)"
+          strokeWidth={2}
+          strokeDasharray="6 5"
+          pointerEvents="none"
+        />
 
         {focusedPoints && focusedPoints[0] && focusedPoints[1] && (() => {
           const p1 = project(focusedPoints[0])
@@ -426,6 +533,11 @@ export function Visualization({
               fill="var(--viz-trunk)"
               stroke="var(--viz-bg)"
               strokeWidth={2}
+              cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+              onPointerDown={startTreeDrag(tree.index)}
+              onPointerMove={moveTreeDrag}
+              onPointerUp={endTreeDrag}
+              onPointerCancel={endTreeDrag}
             />
           )
         })}
@@ -470,6 +582,18 @@ export function Visualization({
                 fill={colliding ? 'var(--viz-status-fail)' : 'var(--viz-other-tree)'}
                 stroke="var(--viz-bg)"
                 strokeWidth={1.5}
+              />
+              {/* Larger invisible hit target on top — the visible dot alone (MIN_TREE_RADIUS_PX) is a cramped drag target, especially on touch. */}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={MIN_TREE_RADIUS_PX + 8}
+                fill="transparent"
+                cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+                onPointerDown={startTreeDrag(tree.index)}
+                onPointerMove={moveTreeDrag}
+                onPointerUp={endTreeDrag}
+                onPointerCancel={endTreeDrag}
               />
               <ScreenSpace at={p} zoomScale={scale}>
                 <text
@@ -602,10 +726,12 @@ export function Visualization({
           purple circle marks the grab point, and the dotted purple line is the second strap segment
           between them; the tent shown reflects that redirected placement while it's active. Pink =
           the distance and the two trees for whichever field is focused in the tree table below.
-          Scroll/pinch to zoom, drag to pan, or use the +/− controls. Distances alone (no compass)
-          can't pin down a layout's true left-right or top-to-bottom orientation, so the ⇋/⇅/⤡
-          button cycles the whole diagram through mirrored, flipped vertically, and both — use it
-          if the drawing comes out backwards from how you actually walked the site.
+          Scroll/pinch to zoom, drag empty space to pan, or use the +/− controls. Drag a tree dot
+          to reposition it — handy for sketching a rough layout before you've measured — and tap
+          or click empty space to add a new tree at that spot. Distances alone (no compass) can't
+          pin down a layout's true left-right or top-to-bottom orientation, so the ⇋/⇅/⤡ button
+          cycles the whole diagram through mirrored, flipped vertically, and both — use it if the
+          drawing comes out backwards from how you actually walked the site.
         </p>
       </details>
     </div>

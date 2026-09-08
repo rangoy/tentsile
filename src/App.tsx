@@ -11,12 +11,13 @@ import {
   computeFloatingAnchor,
   formatTreeDisplay,
   mapFitToFrame,
+  MAX_TREES,
   rankCombinations,
   solveFloatingAnchorTightness,
 } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
 import { useLocations } from './useLocations'
-import type { FloatingAnchorState, OtherTreePoint, Settings, TreeEntry, TreeReferences } from './types'
+import type { FloatingAnchorState, OtherTreePoint, Point, Settings, TreeEntry, TreeReferences } from './types'
 
 const DEFAULT_FLOATING_ANCHOR: FloatingAnchorState = {
   enabled: false,
@@ -147,6 +148,15 @@ export default function App() {
     setTrees(trees.filter((_, i) => i !== index))
     const shift = (refIndex: number) => (refIndex > index ? refIndex - 1 : refIndex)
     setReferences({ a: shift(references.a), b: shift(references.b) })
+  }
+
+  const handleTreeMove = (index: number, pos: Point) => {
+    setTrees(trees.map((t, i) => (i === index ? { ...t, x: pos.x, y: pos.y } : t)))
+  }
+
+  const handleAddTreeAt = (pos: Point) => {
+    if (trees.length >= MAX_TREES) return
+    setTrees([...trees, { label: '', diameter: null, x: pos.x, y: pos.y }])
   }
 
   const handleExport = () => {
@@ -308,6 +318,8 @@ export default function App() {
               mirrored={mirrored}
               flippedVertically={flippedVertically}
               onCycleOrientation={cycleOrientation}
+              onTreeMove={handleTreeMove}
+              onAddTreeAt={handleAddTreeAt}
             />
           )}
         </div>

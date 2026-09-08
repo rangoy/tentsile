@@ -124,6 +124,19 @@ export function Visualization({
   const frozenScaleRef = useRef<{ xScale: d3.ScaleLinear<number, number>; yScale: d3.ScaleLinear<number, number> } | null>(
     null,
   )
+  // The dragged tree's in-progress grove-space position, tracked locally
+  // instead of via onTreeMove on every pointermove — committing it to the
+  // real trees array on every move would re-run rankCombinations (every
+  // 3-tree combo, tent fit, checks) for the whole grove on every pixel of
+  // movement. Only the dragged marker itself reads this for rendering (see
+  // displayPos below); everything else — the tent shape, straps, checks,
+  // results — stays exactly as it was before the drag started, and only
+  // catches up once with the final position on release (see stopDrag).
+  // liveDragPosRef mirrors the state for stopDrag's window-listener fallback,
+  // whose closure is captured once at drag-start and would otherwise read a
+  // stale value.
+  const [liveDragPos, setLiveDragPos] = useState<Point | null>(null)
+  const liveDragPosRef = useRef<Point | null>(null)
   const clickStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null)
   // Which tree (by grove index) the pointer is currently over but not (yet)
   // dragging — shows a crosshair so it's clear the marker is draggable before
@@ -137,8 +150,13 @@ export function Visualization({
   // releasing over an element outside the SVG's own event tree, etc.), which
   // previously left the drag "stuck" active until the next click.
   const stopDrag = () => {
+    if (dragIndexRef.current !== null && liveDragPosRef.current) {
+      onTreeMove(dragIndexRef.current, liveDragPosRef.current)
+    }
     dragIndexRef.current = null
     frozenScaleRef.current = null
+    liveDragPosRef.current = null
+    setLiveDragPos(null)
     setIsDragging(false)
     onDraggingChange?.(null)
   }
@@ -212,6 +230,12 @@ export function Visualization({
 
   const project = (p: Point) => ({ x: xScale(p.x), y: yScale(p.y) })
 
+  // For a tree marker's own dot/label/hit-target only: while it's the one
+  // being dragged, follow the live pointer position instead of its
+  // (frozen-until-drop) real position — see liveDragPos above.
+  const displayPos = (index: number, fallback: Point): Point =>
+    isDragging && dragIndexRef.current === index && liveDragPos ? liveDragPos : fallback
+
   const startTreeDrag = (index: number) => (e: React.PointerEvent) => {
     e.stopPropagation()
     try {
@@ -228,7 +252,9 @@ export function Visualization({
     if (dragIndexRef.current === null) return
     e.stopPropagation()
     const content = toContentPoint(e.clientX, e.clientY)
-    onTreeMove(dragIndexRef.current, { x: xScale.invert(content.x), y: yScale.invert(content.y) })
+    const world = { x: xScale.invert(content.x), y: yScale.invert(content.y) }
+    liveDragPosRef.current = world
+    setLiveDragPos(world)
   }
   const endTreeDrag = (e: React.PointerEvent) => {
     if (dragIndexRef.current === null) return
@@ -553,7 +579,7 @@ export function Visualization({
         })}
 
         {trees.map((tree) => {
-          const p = project(tree.pos)
+          const p = project(displayPos(tree.index, tree.pos))
           const radiusPx = Math.min(
             MAX_TREE_RADIUS_PX,
             Math.max(MIN_TREE_RADIUS_PX, ((tree.diameter / 2) * k) as number),
@@ -573,7 +599,7 @@ export function Visualization({
         })}
 
         {trees.map((tree) => {
-          const p = project(tree.pos)
+          const p = project(displayPos(tree.index, tree.pos))
           return (
             <ScreenSpace at={p} zoomScale={scale} key={`tree-label-${tree.id}`}>
               <text
@@ -599,7 +625,7 @@ export function Visualization({
             (circle + label) — the visible trunk dot alone is too small/fiddly to reliably
             grab, especially for a thin trunk or on touch. */}
         {trees.map((tree) => {
-          const p = project(tree.pos)
+          const p = project(displayPos(tree.index, tree.pos))
           const radiusPx = Math.min(
             MAX_TREE_RADIUS_PX,
             Math.max(MIN_TREE_RADIUS_PX, ((tree.diameter / 2) * k) as number),
@@ -623,7 +649,7 @@ export function Visualization({
         })}
 
         {otherTrees.map((tree) => {
-          const p = project(tree.pos)
+          const p = project(displayPos(tree.index, tree.pos))
           const trunkRadius = (tree.diameter ?? DEFAULT_TRUNK_DIAMETER) / 2
           const clearance = signedDistanceToTriangle(tree.pos, cornerA, cornerB, cornerC) - trunkRadius
           const colliding = clearance < 0

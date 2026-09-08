@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type {
   ComboResult,
   CheckStatus,
@@ -125,6 +125,38 @@ export function Visualization({
     null,
   )
   const clickStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null)
+  // Which tree (by grove index) the pointer is currently over but not (yet)
+  // dragging — shows a crosshair so it's clear the marker is draggable before
+  // the user commits to a drag.
+  const [hoveredTreeIndex, setHoveredTreeIndex] = useState<number | null>(null)
+
+  // Shared cleanup for ending a drag, used both by a marker's own
+  // pointerup/pointercancel and by the window-level fallback below — pointer
+  // capture normally routes the release event straight back to the element
+  // that started the drag, but capture can be lost (browser quirk, alt-tab,
+  // releasing over an element outside the SVG's own event tree, etc.), which
+  // previously left the drag "stuck" active until the next click.
+  const stopDrag = () => {
+    dragIndexRef.current = null
+    frozenScaleRef.current = null
+    setIsDragging(false)
+    onDraggingChange?.(null)
+  }
+  // Fallback for when the per-element pointerup/pointercancel never arrives.
+  // Also ends the drag if the window loses focus mid-gesture (alt-tab, a
+  // native dialog, etc.), where no pointer event fires at all.
+  useEffect(() => {
+    if (!isDragging) return
+    window.addEventListener('pointerup', stopDrag)
+    window.addEventListener('pointercancel', stopDrag)
+    window.addEventListener('blur', stopDrag)
+    return () => {
+      window.removeEventListener('pointerup', stopDrag)
+      window.removeEventListener('pointercancel', stopDrag)
+      window.removeEventListener('blur', stopDrag)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging])
 
   if (!triangle.valid) {
     return (
@@ -206,10 +238,7 @@ export function Visualization({
     } catch {
       // ignore
     }
-    dragIndexRef.current = null
-    frozenScaleRef.current = null
-    setIsDragging(false)
-    onDraggingChange?.(null)
+    stopDrag()
   }
 
   const handleCanvasPointerDown = (e: React.PointerEvent<SVGRectElement>) => {
@@ -587,6 +616,8 @@ export function Visualization({
               onPointerMove={moveTreeDrag}
               onPointerUp={endTreeDrag}
               onPointerCancel={endTreeDrag}
+              onPointerEnter={() => setHoveredTreeIndex(tree.index)}
+              onPointerLeave={() => setHoveredTreeIndex((prev) => (prev === tree.index ? null : prev))}
             />
           )
         })}
@@ -640,6 +671,8 @@ export function Visualization({
                 onPointerMove={moveTreeDrag}
                 onPointerUp={endTreeDrag}
                 onPointerCancel={endTreeDrag}
+                onPointerEnter={() => setHoveredTreeIndex(tree.index)}
+                onPointerLeave={() => setHoveredTreeIndex((prev) => (prev === tree.index ? null : prev))}
               />
             </g>
           )
@@ -662,6 +695,26 @@ export function Visualization({
               />
             )
           })}
+
+        {/* Crosshair over a hovered-but-not-yet-dragging tree, so it's clear the
+            marker can be picked up before the user commits to a drag. Halo line
+            underneath each stroke keeps it legible over any dot color. */}
+        {hoveredTreeIndex !== null &&
+          !isDragging &&
+          (() => {
+            const pos = indexToPoint(hoveredTreeIndex)
+            if (!pos) return null
+            const p = project(pos)
+            const arm = 15
+            return (
+              <g pointerEvents="none">
+                <line x1={p.x - arm} y1={p.y} x2={p.x + arm} y2={p.y} stroke="var(--viz-bg)" strokeWidth={4.5} strokeLinecap="round" />
+                <line x1={p.x} y1={p.y - arm} x2={p.x} y2={p.y + arm} stroke="var(--viz-bg)" strokeWidth={4.5} strokeLinecap="round" />
+                <line x1={p.x - arm} y1={p.y} x2={p.x + arm} y2={p.y} stroke="var(--viz-ink)" strokeWidth={2} strokeLinecap="round" />
+                <line x1={p.x} y1={p.y - arm} x2={p.x} y2={p.y + arm} stroke="var(--viz-ink)" strokeWidth={2} strokeLinecap="round" />
+              </g>
+            )
+          })()}
 
         {angleLabels.map((angle) => {
           const p = project(angle.pos)

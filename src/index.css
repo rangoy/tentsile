@@ -408,7 +408,10 @@ main {
 }
 
 .tree-row-dragging {
-  background: rgba(214, 0, 111, 0.14);
+  /* Matches the tent's own blue accent (--viz-tent-stroke) rather than
+     --viz-highlight's pink, which reads too close to a warning/error color
+     for what's just "this row is being actively moved." */
+  background: rgba(61, 91, 176, 0.16);
 }
 
 .tree-table input[type='number'],

@@ -551,6 +551,37 @@ main {
   margin-bottom: 0;
 }
 
+.changelog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.changelog-list > li {
+  margin-bottom: 0.9rem;
+}
+
+.changelog-list > li:last-child {
+  margin-bottom: 0;
+}
+
+.changelog-date {
+  display: block;
+  font-weight: 700;
+  opacity: 0.7;
+  margin-bottom: 0.2rem;
+}
+
+.changelog-list ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.changelog-list ul li {
+  margin-bottom: 0.2rem;
+}
+
 .menu-field {
   display: block;
   margin-bottom: 0.6rem;

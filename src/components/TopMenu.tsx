@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Location, Settings } from '../types'
+import { Changelog } from './Changelog'
 import { LocationSwitcher } from './LocationSwitcher'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -75,6 +76,8 @@ export function TopMenu({
           />
           <hr className="top-menu-divider" />
           <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} />
+          <hr className="top-menu-divider" />
+          <Changelog />
         </div>
       )}
     </div>

@@ -533,11 +533,7 @@ export function Visualization({
               fill="var(--viz-trunk)"
               stroke="var(--viz-bg)"
               strokeWidth={2}
-              cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
-              onPointerDown={startTreeDrag(tree.index)}
-              onPointerMove={moveTreeDrag}
-              onPointerUp={endTreeDrag}
-              onPointerCancel={endTreeDrag}
+              pointerEvents="none"
             />
           )
         })}
@@ -557,10 +553,36 @@ export function Visualization({
                 strokeWidth={3}
                 strokeLinejoin="round"
                 paintOrder="stroke"
+                pointerEvents="none"
               >
                 {labels[tree.id]}
               </text>
             </ScreenSpace>
+          )
+        })}
+
+        {/* Generous invisible hit target, drawn on top of everything else for this tree
+            (circle + label) — the visible trunk dot alone is too small/fiddly to reliably
+            grab, especially for a thin trunk or on touch. */}
+        {trees.map((tree) => {
+          const p = project(tree.pos)
+          const radiusPx = Math.min(
+            MAX_TREE_RADIUS_PX,
+            Math.max(MIN_TREE_RADIUS_PX, ((tree.diameter / 2) * k) as number),
+          )
+          return (
+            <circle
+              key={`tree-hit-${tree.id}`}
+              cx={p.x}
+              cy={p.y}
+              r={radiusPx + 12}
+              fill="transparent"
+              cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+              onPointerDown={startTreeDrag(tree.index)}
+              onPointerMove={moveTreeDrag}
+              onPointerUp={endTreeDrag}
+              onPointerCancel={endTreeDrag}
+            />
           )
         })}
 
@@ -582,18 +604,7 @@ export function Visualization({
                 fill={colliding ? 'var(--viz-status-fail)' : 'var(--viz-other-tree)'}
                 stroke="var(--viz-bg)"
                 strokeWidth={1.5}
-              />
-              {/* Larger invisible hit target on top — the visible dot alone (MIN_TREE_RADIUS_PX) is a cramped drag target, especially on touch. */}
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={MIN_TREE_RADIUS_PX + 8}
-                fill="transparent"
-                cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
-                onPointerDown={startTreeDrag(tree.index)}
-                onPointerMove={moveTreeDrag}
-                onPointerUp={endTreeDrag}
-                onPointerCancel={endTreeDrag}
+                pointerEvents="none"
               />
               <ScreenSpace at={p} zoomScale={scale}>
                 <text
@@ -607,11 +618,24 @@ export function Visualization({
                   strokeWidth={3}
                   strokeLinejoin="round"
                   paintOrder="stroke"
+                  pointerEvents="none"
                 >
                   {tree.display}
                   {colliding ? ' ⚠' : ''}
                 </text>
               </ScreenSpace>
+              {/* Generous invisible hit target on top — the visible dot alone (MIN_TREE_RADIUS_PX) is too cramped to reliably grab, especially on touch. */}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={MIN_TREE_RADIUS_PX + 12}
+                fill="transparent"
+                cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+                onPointerDown={startTreeDrag(tree.index)}
+                onPointerMove={moveTreeDrag}
+                onPointerUp={endTreeDrag}
+                onPointerCancel={endTreeDrag}
+              />
             </g>
           )
         })}
@@ -671,6 +695,15 @@ export function Visualization({
           </g>
         </svg>
         <div className="viz-controls">
+          <button
+            type="button"
+            onClick={() => onAddTreeAt({ x: cx, y: cy })}
+            aria-label="Add a tree at the center of the view"
+            title="Add a tree at the center of the view — drag it into place after"
+            className="viz-reset-button"
+          >
+            + Tree
+          </button>
           {(() => {
             // Distances (and no compass) can't pin down a layout's true left-right or
             // top-to-bottom orientation — one button cycles through all 4 combinations

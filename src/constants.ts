@@ -47,10 +47,10 @@ export const TENT_PRESETS: Record<Exclude<TentModel, 'custom'>, TentPreset> = {
 }
 
 export const DEFAULT_TREES: TreeEntry[] = [
-  { label: '', diameter: null, distToFirst: 0, distToSecond: 0, flipSide: false },
-  { label: '', diameter: null, distToFirst: 7.5, distToSecond: 0, flipSide: false },
-  { label: '', diameter: null, distToFirst: 8.5, distToSecond: 8, flipSide: false },
-  { label: '', diameter: null, distToFirst: 6, distToSecond: 7, flipSide: false },
+  { label: '', diameter: null, x: 0, y: 0 },
+  { label: '', diameter: null, x: 7.5, y: 0 },
+  { label: '', diameter: null, x: 4.3, y: 7.332121111929345 },
+  { label: '', diameter: null, x: 2.883333333333333, y: 5.261785712938992 },
 ]
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -93,6 +93,12 @@ export function createLocation(
   return { id, name, trees, references, mirrored: false, flippedVertically: false }
 }
 
+function isValidTreeEntry(value: unknown): value is TreeEntry {
+  if (typeof value !== 'object' || value === null) return false
+  const t = value as TreeEntry
+  return typeof t.x === 'number' && typeof t.y === 'number'
+}
+
 export function isValidLocation(value: unknown): value is Location {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Location
@@ -100,6 +106,7 @@ export function isValidLocation(value: unknown): value is Location {
     typeof v.id === 'string' &&
     typeof v.name === 'string' &&
     Array.isArray(v.trees) &&
+    v.trees.every(isValidTreeEntry) &&
     isValidReferences(v.references)
   )
 }

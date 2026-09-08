@@ -12,7 +12,6 @@ import {
   formatTreeDisplay,
   mapFitToFrame,
   rankCombinations,
-  recomputeTreesForReferences,
   solveFloatingAnchorTightness,
 } from './geometry'
 import { useLocalStorage } from './useLocalStorage'
@@ -53,15 +52,36 @@ export default function App() {
     else updateCurrentLocation({ mirrored: false, flippedVertically: false })
   }
   const [settings, setSettings] = useLocalStorage<Settings>('tentsile.settings', DEFAULT_SETTINGS, isValidSettings)
-  const [referenceError, setReferenceError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
   const [floatingAnchorState, setFloatingAnchorState] = useState<FloatingAnchorState>(DEFAULT_FLOATING_ANCHOR)
   const [focusedEdit, setFocusedEdit] = useState<{ a: number; b: number } | null>(null)
+  // A tree with a currently-rejected (geometrically impossible) distance edit
+  // keeps its last valid position (see InputForm.tsx) but is excluded from
+  // combos/visualization entirely until fixed — keyed by index, value is the
+  // warning message InputForm shows for that row.
+  const [invalidTrees, setInvalidTrees] = useState<Record<number, string>>({})
+  const setTreeValidity = (index: number, message: string | null) => {
+    setInvalidTrees((prev) => {
+      if (message === null) {
+        if (!(index in prev)) return prev
+        const next = { ...prev }
+        delete next[index]
+        return next
+      }
+      return { ...prev, [index]: message }
+    })
+  }
+  // Removing a tree shifts every later index, so a stale entry could end up
+  // attached to the wrong row — simplest correct fix is to drop them all.
+  // Switching references also invalidates them (the baseline they were
+  // measured against no longer applies).
+  useEffect(() => setInvalidTrees({}), [references.a, references.b, trees.length])
+  const excludedTreeIndices = useMemo(() => new Set(Object.keys(invalidTrees).map(Number)), [invalidTrees])
 
-  const { combos, positionErrors, positions } = useMemo(
-    () => rankCombinations(trees, settings, 5, references.a, references.b),
-    [trees, settings, references],
+  const { combos, positions } = useMemo(
+    () => rankCombinations(trees, settings, 5, excludedTreeIndices),
+    [trees, settings, excludedTreeIndices],
   )
 
   const selected = combos.find((c) => comboKey(c) === selectedKey) ?? combos[0]
@@ -76,12 +96,13 @@ export default function App() {
     const result: OtherTreePoint[] = []
     for (let idx = 0; idx < trees.length; idx++) {
       if (idx === i || idx === j || idx === k) continue
+      if (excludedTreeIndices.has(idx)) continue
       const pos = positions[idx]
       if (!pos) continue
       result.push({ index: idx, display: formatTreeDisplay(idx + 1, trees[idx].label), pos, diameter: trees[idx].diameter })
     }
     return result
-  }, [trees, positions, selected])
+  }, [trees, positions, selected, excludedTreeIndices])
 
   // selected.fit is solved in its own arbitrary local frame (see mapFitToFrame) —
   // remapped here into the grove's shared global frame so the displayed triangle
@@ -157,13 +178,6 @@ export default function App() {
 
   const handleReferenceChange = (which: 'a' | 'b', newIndex: number) => {
     const next = which === 'a' ? { a: newIndex, b: references.b } : { a: references.a, b: newIndex }
-    const result = recomputeTreesForReferences(trees, references.a, references.b, next.a, next.b)
-    if (result.error) {
-      setReferenceError(result.error)
-      return
-    }
-    setReferenceError(null)
-    setTrees(result.trees)
     setReferences(next)
   }
 
@@ -242,12 +256,12 @@ export default function App() {
   }, [selected ? comboKey(selected) : null])
 
   // A different location has its own trees/references entirely — carrying
-  // over a reference-change error or a floating-anchor redirect picked
-  // against the previous location's trees makes no sense once switched.
+  // over a floating-anchor redirect picked against the previous location's
+  // trees makes no sense once switched.
   useEffect(() => {
-    setReferenceError(null)
     setFloatingAnchorState(DEFAULT_FLOATING_ANCHOR)
     setFocusedEdit(null)
+    setInvalidTrees({})
   }, [currentLocationId])
 
   return (
@@ -304,10 +318,10 @@ export default function App() {
             onRemoveTree={handleRemoveTree}
             references={references}
             onReferenceChange={handleReferenceChange}
-            referenceError={referenceError}
             onFocusEdit={setFocusedEdit}
             settings={settings}
-            positionErrors={positionErrors}
+            invalidTrees={invalidTrees}
+            onTreeValidityChange={setTreeValidity}
           />
         </div>
         <div className="grid-results">

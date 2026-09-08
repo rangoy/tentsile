@@ -67,29 +67,27 @@ export interface TreeLabels {
 }
 
 /**
- * One tree in a grove of up to MAX_TREES candidates. Trees are entered via
- * baseline + trilateration rather than a full pairwise distance matrix: two
- * trees are designated as references (see TreeReferences — by default the
- * first two, but any pair can be chosen, e.g. when the default pair happens
- * to be awkward to measure between), and every other tree gives its distance
- * to both reference trees plus which side of the reference-pair line it's on
- * (this last part only matters for inferring the distance between two
- * non-reference trees, since their own distances to the references are given
- * directly).
+ * One tree in a grove of up to MAX_TREES candidates. Position is stored
+ * directly as x/y, in an arbitrary stable frame (origin/rotation don't
+ * matter — every downstream check is orientation-invariant, see Location's
+ * mirrored/flippedVertically comment below). Distances shown for editing
+ * (see TreeReferences) are derived from x/y on the fly rather than stored.
  */
 export interface TreeEntry {
   /** optional free-text label, empty by default — the tree's identity is its 1-based position */
   label: string
   diameter: number | null
-  /** meters to reference A (unused for a tree currently acting as reference A) */
-  distToFirst: number
-  /** meters to reference B (unused for a tree currently acting as either reference) */
-  distToSecond: number
-  /** true = mirrored to the other side of the reference-pair line */
-  flipSide: boolean
+  x: number
+  y: number
 }
 
-/** Which two grove trees (by index) anchor the coordinate system the rest are measured against. */
+/**
+ * Which two grove trees (by index) the distance-entry table shows editable
+ * "distance to this tree" columns for — a display/input convenience only.
+ * Since position is stored directly (see TreeEntry), the reference pair no
+ * longer defines the coordinate frame, and switching it never touches
+ * stored data.
+ */
 export interface TreeReferences {
   a: number
   b: number

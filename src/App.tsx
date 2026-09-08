@@ -57,6 +57,8 @@ export default function App() {
   const [selectedKey, setSelectedKey] = useState('')
   const [floatingAnchorState, setFloatingAnchorState] = useState<FloatingAnchorState>(DEFAULT_FLOATING_ANCHOR)
   const [focusedEdit, setFocusedEdit] = useState<{ a: number; b: number } | null>(null)
+  /** grove index of the tree currently being dragged on the canvas, or null — lets the input table highlight the matching row, see Visualization's onDraggingChange */
+  const [draggingTreeIndex, setDraggingTreeIndex] = useState<number | null>(null)
   // A tree with a currently-rejected (geometrically impossible) distance edit
   // keeps its last valid position (see InputForm.tsx) but is excluded from
   // combos/visualization entirely until fixed — keyed by index, value is the
@@ -272,6 +274,7 @@ export default function App() {
     setFloatingAnchorState(DEFAULT_FLOATING_ANCHOR)
     setFocusedEdit(null)
     setInvalidTrees({})
+    setDraggingTreeIndex(null)
   }, [currentLocationId])
 
   return (
@@ -320,6 +323,7 @@ export default function App() {
               onCycleOrientation={cycleOrientation}
               onTreeMove={handleTreeMove}
               onAddTreeAt={handleAddTreeAt}
+              onDraggingChange={setDraggingTreeIndex}
             />
           )}
         </div>
@@ -334,6 +338,7 @@ export default function App() {
             settings={settings}
             invalidTrees={invalidTrees}
             onTreeValidityChange={setTreeValidity}
+            draggingTreeIndex={draggingTreeIndex}
           />
         </div>
         <div className="grid-results">

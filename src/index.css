@@ -407,6 +407,10 @@ main {
   vertical-align: middle;
 }
 
+.tree-row-dragging {
+  background: rgba(214, 0, 111, 0.14);
+}
+
 .tree-table input[type='number'],
 .tree-table input[type='text'] {
   font: inherit;

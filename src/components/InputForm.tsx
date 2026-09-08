@@ -23,6 +23,8 @@ interface Props {
   invalidTrees: Record<number, string>
   /** reports a row becoming invalid (message) or valid again (null) — see App.tsx's setTreeValidity */
   onTreeValidityChange: (index: number, message: string | null) => void
+  /** grove index of the tree currently being dragged on the canvas, or null — highlights the matching row so it's clear which tree that is */
+  draggingTreeIndex: number | null
 }
 
 function numberOrNull(raw: string): number | null {
@@ -77,6 +79,7 @@ export function InputForm({
   onFocusEdit,
   invalidTrees,
   onTreeValidityChange,
+  draggingTreeIndex,
 }: Props) {
   const updateTree = (index: number, patch: Partial<TreeEntry>) => {
     onTreesChange(trees.map((t, i) => (i === index ? { ...t, ...patch } : t)))
@@ -180,7 +183,7 @@ export function InputForm({
                 onTreeValidityChange(index, null)
               }
               return (
-                <tr key={index}>
+                <tr key={index} className={index === draggingTreeIndex ? 'tree-row-dragging' : undefined}>
                   <td className="cell-number">{index + 1}</td>
                   <td>
                     <input

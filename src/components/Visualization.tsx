@@ -39,6 +39,8 @@ interface Props {
   onTreeMove: (index: number, pos: Point) => void
   /** tap/click empty canvas to add a new tree at that grove position */
   onAddTreeAt: (pos: Point) => void
+  /** reports the grove index of the tree currently being dragged, or null once released — lets the input table highlight the matching row */
+  onDraggingChange?: (index: number | null) => void
 }
 
 const WIDTH = 640
@@ -89,6 +91,7 @@ export function Visualization({
   onCycleOrientation,
   onTreeMove,
   onAddTreeAt,
+  onDraggingChange,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
@@ -187,6 +190,7 @@ export function Visualization({
     frozenScaleRef.current = { xScale: freshXScale, yScale: freshYScale }
     dragIndexRef.current = index
     setIsDragging(true)
+    onDraggingChange?.(index)
   }
   const moveTreeDrag = (e: React.PointerEvent) => {
     if (dragIndexRef.current === null) return
@@ -205,6 +209,7 @@ export function Visualization({
     dragIndexRef.current = null
     frozenScaleRef.current = null
     setIsDragging(false)
+    onDraggingChange?.(null)
   }
 
   const handleCanvasPointerDown = (e: React.PointerEvent<SVGRectElement>) => {

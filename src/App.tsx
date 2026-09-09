@@ -176,9 +176,14 @@ export default function App() {
     try {
       const text = await file.text()
       const result = parseBackupPayload(text)
-      const confirmed = window.confirm(
-        `Import ${result.locations.length} location(s)? This replaces every location currently saved in this browser.`,
-      )
+      const existingIds = new Set(locations.map((l) => l.id))
+      const updateCount = result.locations.filter((l) => existingIds.has(l.id)).length
+      const newCount = result.locations.length - updateCount
+      const message =
+        `Import ${result.locations.length} location(s)? ${newCount} new` +
+        (updateCount > 0 ? `, ${updateCount} will overwrite existing location(s) with the same ID` : '') +
+        '. Other saved locations are kept.'
+      const confirmed = window.confirm(message)
       if (!confirmed) return
       importLocations(result.locations)
       if (result.settings) setSettings(result.settings)

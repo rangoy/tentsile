@@ -11,6 +11,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-09',
+    items: [
+      'Importing a backup now merges into what’s already saved instead of replacing it: a location with a matching ID gets updated, a new ID gets added, and anything else already saved is left alone.',
+    ],
+  },
+  {
     date: '2026-09-08',
     items: [
       'Sketch a rough layout before you’ve measured anything: drag trees straight on the diagram to reposition them, tap empty space (or the "+ Tree" button) to add one.',

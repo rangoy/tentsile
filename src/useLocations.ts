@@ -116,9 +116,20 @@ export function useLocations() {
     setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)))
   }
 
-  /** Wholesale replace from an imported backup — selects the first imported location as current. */
+  /**
+   * Merges an imported backup into what's already saved: a location whose id
+   * matches one already here overwrites it in place, anything with a new id
+   * is added, and anything already saved but absent from the file is left
+   * alone — an import never removes a location on its own. Selects the
+   * first imported location as current so the result is visible immediately.
+   */
   const importLocations = (newLocations: Location[]) => {
-    setLocations(newLocations)
+    if (newLocations.length === 0) return
+    setLocations((prev) => {
+      const byId = new Map(prev.map((l) => [l.id, l]))
+      for (const loc of newLocations) byId.set(loc.id, loc)
+      return Array.from(byId.values())
+    })
     setCurrentLocationId(newLocations[0].id)
   }
 

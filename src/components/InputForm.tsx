@@ -335,16 +335,16 @@ export function InputForm({
   // more importantly, a mobile keyboard's own "next" control, which follows
   // this same browser focus order rather than any keypress we could
   // intercept — never leaks out to an unrelated part of the page (or in from
-  // one) partway through. Picking the references comes first, then every
-  // tree's "→ Ref A" distance, then every "→ Ref B" distance — matching how
-  // you actually measure in the field: walk the whole grove once from each
-  // reference tree, instead of zigzagging between the two per tree. Those
-  // three groups are the ones worth measuring in one pass, so they're
-  // column-major; the rest (label, diameter, flip, remove) aren't something
-  // you'd fill in a dedicated sweep, so they just go row by row afterward.
+  // one) partway through, and goes straight down one column before moving to
+  // the next: references, then every label, then every "→ Ref A" distance,
+  // then every "→ Ref B" distance, then flip, then diameter, then remove —
+  // matching how you'd actually fill this in, one full pass per kind of
+  // value instead of hopping across a row for each tree.
   let nextTabIndex = 1
   const refATabIndex = nextTabIndex++
   const refBTabIndex = nextTabIndex++
+  const labelTabIndex = new Map<number, number>()
+  trees.forEach((_, i) => labelTabIndex.set(i, nextTabIndex++))
   const distATabIndex = new Map<number, number>()
   trees.forEach((_, i) => {
     if (i === references.a) return
@@ -355,15 +355,17 @@ export function InputForm({
     if (i === references.a || i === references.b) return
     distBTabIndex.set(i, nextTabIndex++)
   })
-  const labelTabIndex = new Map<number, number>()
-  const diameterTabIndex = new Map<number, number>()
   const flipTabIndex = new Map<number, number>()
+  trees.forEach((_, i) => {
+    if (i === references.a || i === references.b) return
+    flipTabIndex.set(i, nextTabIndex++)
+  })
+  const diameterTabIndex = new Map<number, number>()
+  trees.forEach((_, i) => diameterTabIndex.set(i, nextTabIndex++))
   const removeTabIndex = new Map<number, number>()
   trees.forEach((_, i) => {
-    labelTabIndex.set(i, nextTabIndex++)
-    diameterTabIndex.set(i, nextTabIndex++)
-    if (i !== references.a && i !== references.b) flipTabIndex.set(i, nextTabIndex++)
-    if (i !== references.a && i !== references.b && trees.length > MIN_TREES) removeTabIndex.set(i, nextTabIndex++)
+    if (i === references.a || i === references.b || trees.length <= MIN_TREES) return
+    removeTabIndex.set(i, nextTabIndex++)
   })
   const addTreeTabIndex = nextTabIndex++
 

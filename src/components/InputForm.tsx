@@ -199,7 +199,11 @@ function TreeRow({
             setLabelText(next)
             labelDebounce.schedule(() => onUpdateTree(index, { label: next }))
           }}
-          onBlur={labelDebounce.flush}
+          onFocus={() => onFocusEdit({ a: index, b: index })}
+          onBlur={() => {
+            labelDebounce.flush()
+            onFocusEdit(null)
+          }}
         />
       </td>
       <td>
@@ -266,6 +270,8 @@ function TreeRow({
               const pos = positionFromDistances(refAPos, refBPos, distToA, distToB, e.target.checked)
               if (pos) applyEdit(pos)
             }}
+            onFocus={() => onFocusEdit({ a: index, b: index })}
+            onBlur={() => onFocusEdit(null)}
           />
         )}
       </td>
@@ -282,7 +288,11 @@ function TreeRow({
             setDiameterText(next)
             diameterDebounce.schedule(() => commitDiameter(next))
           }}
-          onBlur={diameterDebounce.flush}
+          onFocus={() => onFocusEdit({ a: index, b: index })}
+          onBlur={() => {
+            diameterDebounce.flush()
+            onFocusEdit(null)
+          }}
         />
       </td>
       <td>
@@ -292,6 +302,8 @@ function TreeRow({
             className="icon-button"
             tabIndex={removeTabIndex}
             onClick={() => onRemoveTree(index)}
+            onFocus={() => onFocusEdit({ a: index, b: index })}
+            onBlur={() => onFocusEdit(null)}
             aria-label={`Remove tree ${index + 1}`}
           >
             ×

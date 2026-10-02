@@ -25,7 +25,10 @@
   --viz-status-fail: #c0392b;
   --viz-redirect: #8e44ad;
   --viz-ratchet: #d97b06;
-  --viz-highlight: #d6006f;
+  /* A vivid blue rather than a warm/red hue — same reasoning as
+     .tree-row-dragging below: this marks "this is what you're currently
+     editing," not a warning, and a pink/red reads as the latter. */
+  --viz-highlight: #0ea5e9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -409,8 +412,9 @@ main {
 
 .tree-row-dragging {
   /* Matches the tent's own blue accent (--viz-tent-stroke) rather than
-     --viz-highlight's pink, which reads too close to a warning/error color
-     for what's just "this row is being actively moved." */
+     --viz-highlight — a different shade of the same calm blue family, kept
+     visually distinct from "this is what you're editing" (the diagram ring/
+     edge) since this just means "this row's tree is being dragged." */
   background: rgba(61, 91, 176, 0.16);
 }
 

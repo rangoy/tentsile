@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'New Undo button (also Ctrl/Cmd+Z) to step back the last tree move or edit — distances, labels, diameters, and flips included.',
       'On the Trees table, Tab (and a phone keyboard’s own "next" button) now moves straight down one column at a time — labels, then distance to the first reference tree, then the second, then flip, then diameter — instead of zigzagging across each row.',
       'Trees on the layout diagram are now locked by default, so panning and zooming around can’t accidentally drag one out of place. Tap the lock icon above the diagram to unlock them for editing (moving or adding trees), then lock them again when you’re done.',
+      'Editing a tree’s label, flip, diameter, or remove button now highlights that tree on the layout diagram too, not just while editing a distance — and the highlight color changed from pink to blue so it doesn’t read as a warning.',
     ],
   },
   {

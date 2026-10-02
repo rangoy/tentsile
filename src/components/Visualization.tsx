@@ -725,7 +725,10 @@ export function Visualization({
         })}
 
         {focusedEdit &&
-          [focusedEdit.a, focusedEdit.b].map((idx) => {
+          // Deduped: a label/flip/diameter edit highlights a single tree via
+          // {a: index, b: index} (see InputForm), which would otherwise
+          // render two identical rings under the same React key.
+          Array.from(new Set([focusedEdit.a, focusedEdit.b])).map((idx) => {
             const pos = indexToPoint(idx)
             if (!pos) return null
             const p = project(pos)

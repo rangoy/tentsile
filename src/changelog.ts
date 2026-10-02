@@ -14,7 +14,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-10-02',
     items: [
       'New Undo button (also Ctrl/Cmd+Z) to step back the last tree move or edit — distances, labels, diameters, and flips included.',
-      'On the Trees table, Tab (and a phone keyboard’s own "next" button) now steps straight down every distance to the first reference tree, then down every distance to the second — matching how you actually measure in the field, instead of zigzagging between the two per tree.',
+      'On the Trees table, Tab (and a phone keyboard’s own "next" button) now steps straight down every distance to the first reference tree, then down every distance to the second, before moving on to labels/diameters — matching how you actually measure in the field, instead of zigzagging between the two reference trees per row.',
       'Trees on the layout diagram are now locked by default, so panning and zooming around can’t accidentally drag one out of place. Tap the lock icon above the diagram to unlock them for editing (moving or adding trees), then lock them again when you’re done.',
     ],
   },

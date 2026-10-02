@@ -93,9 +93,13 @@ interface TreeRowProps {
   refALabel: string
   refBLabel: string
   unit: Settings['unitSystem']
-  /** explicit tab stops for the distance fields — see InputForm's own comment on why; undefined for a row with no such field (e.g. Ref A has none) */
+  /** explicit tab stops — see InputForm's own comment on why; undefined for a row with no such field (e.g. Ref A has no distance or remove button) */
+  labelTabIndex?: number
   distATabIndex?: number
   distBTabIndex?: number
+  diameterTabIndex?: number
+  flipTabIndex?: number
+  removeTabIndex?: number
   isDragging: boolean
   canRemove: boolean
   onUpdateTree: (index: number, patch: Partial<TreeEntry>) => void
@@ -123,8 +127,12 @@ function TreeRow({
   refALabel,
   refBLabel,
   unit,
+  labelTabIndex,
   distATabIndex,
   distBTabIndex,
+  diameterTabIndex,
+  flipTabIndex,
+  removeTabIndex,
   isDragging,
   canRemove,
   onUpdateTree,
@@ -184,6 +192,7 @@ function TreeRow({
           className="tree-label-input"
           type="text"
           placeholder="optional"
+          tabIndex={labelTabIndex}
           value={labelText}
           onChange={(e) => {
             const next = e.target.value
@@ -251,6 +260,7 @@ function TreeRow({
         ) : (
           <input
             type="checkbox"
+            tabIndex={flipTabIndex}
             checked={flipSide}
             onChange={(e) => {
               const pos = positionFromDistances(refAPos, refBPos, distToA, distToB, e.target.checked)
@@ -264,6 +274,7 @@ function TreeRow({
           type="number"
           min={0}
           step={1}
+          tabIndex={diameterTabIndex}
           placeholder={String(Math.round(cmToDisplayDiameter(40, unit)))}
           value={diameterText}
           onChange={(e) => {
@@ -276,7 +287,13 @@ function TreeRow({
       </td>
       <td>
         {!isRefA && !isRefB && canRemove && (
-          <button type="button" className="icon-button" onClick={() => onRemoveTree(index)} aria-label={`Remove tree ${index + 1}`}>
+          <button
+            type="button"
+            className="icon-button"
+            tabIndex={removeTabIndex}
+            onClick={() => onRemoveTree(index)}
+            aria-label={`Remove tree ${index + 1}`}
+          >
             ×
           </button>
         )}
@@ -314,15 +331,17 @@ export function InputForm({
   const refALabel = formatTreeDisplay(references.a + 1, trees[references.a]?.label ?? '')
   const refBLabel = formatTreeDisplay(references.b + 1, trees[references.b]?.label ?? '')
 
-  // Explicit tab stops, so Tab — and, more importantly, a mobile keyboard's
-  // own "next" control, which follows this same browser focus order rather
-  // than any keypress we could intercept — steps straight down "→ Ref A" for
-  // every tree, then down "→ Ref B", matching how you actually measure in
-  // the field: walk the whole grove once from each reference tree, instead
-  // of zigzagging between the two per tree. Picking the references comes
-  // right before, since that's the natural first step. Everything else
-  // (label, diameter, flip, remove) keeps the browser's default order, which
-  // picks up right after this explicit range ends.
+  // Explicit tab stops for every field in and around the table, so Tab — and,
+  // more importantly, a mobile keyboard's own "next" control, which follows
+  // this same browser focus order rather than any keypress we could
+  // intercept — never leaks out to an unrelated part of the page (or in from
+  // one) partway through. Picking the references comes first, then every
+  // tree's "→ Ref A" distance, then every "→ Ref B" distance — matching how
+  // you actually measure in the field: walk the whole grove once from each
+  // reference tree, instead of zigzagging between the two per tree. Those
+  // three groups are the ones worth measuring in one pass, so they're
+  // column-major; the rest (label, diameter, flip, remove) aren't something
+  // you'd fill in a dedicated sweep, so they just go row by row afterward.
   let nextTabIndex = 1
   const refATabIndex = nextTabIndex++
   const refBTabIndex = nextTabIndex++
@@ -336,6 +355,17 @@ export function InputForm({
     if (i === references.a || i === references.b) return
     distBTabIndex.set(i, nextTabIndex++)
   })
+  const labelTabIndex = new Map<number, number>()
+  const diameterTabIndex = new Map<number, number>()
+  const flipTabIndex = new Map<number, number>()
+  const removeTabIndex = new Map<number, number>()
+  trees.forEach((_, i) => {
+    labelTabIndex.set(i, nextTabIndex++)
+    diameterTabIndex.set(i, nextTabIndex++)
+    if (i !== references.a && i !== references.b) flipTabIndex.set(i, nextTabIndex++)
+    if (i !== references.a && i !== references.b && trees.length > MIN_TREES) removeTabIndex.set(i, nextTabIndex++)
+  })
+  const addTreeTabIndex = nextTabIndex++
 
   return (
     <div className="panel">
@@ -400,8 +430,12 @@ export function InputForm({
                 refALabel={refALabel}
                 refBLabel={refBLabel}
                 unit={unit}
+                labelTabIndex={labelTabIndex.get(index)}
                 distATabIndex={distATabIndex.get(index)}
                 distBTabIndex={distBTabIndex.get(index)}
+                diameterTabIndex={diameterTabIndex.get(index)}
+                flipTabIndex={flipTabIndex.get(index)}
+                removeTabIndex={removeTabIndex.get(index)}
                 isDragging={index === draggingTreeIndex}
                 canRemove={trees.length > MIN_TREES}
                 onUpdateTree={updateTree}
@@ -424,7 +458,13 @@ export function InputForm({
         </ul>
       )}
 
-      <button type="button" className="add-tree-button" onClick={addTree} disabled={trees.length >= MAX_TREES}>
+      <button
+        type="button"
+        className="add-tree-button"
+        tabIndex={addTreeTabIndex}
+        onClick={addTree}
+        disabled={trees.length >= MAX_TREES}
+      >
         + Add another tree
       </button>
       {trees.length >= MAX_TREES ? (

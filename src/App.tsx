@@ -33,6 +33,8 @@ export default function App() {
     currentLocationId,
     setCurrentLocationId,
     updateCurrentLocation,
+    undo,
+    canUndo,
     addLocation,
     removeLocation,
     renameLocation,
@@ -287,6 +289,22 @@ export default function App() {
     setDraggingTreeIndex(null)
   }, [currentLocationId])
 
+  // Ctrl/Cmd+Z triggers undo, except while focus is in a text field — there,
+  // the browser's own native undo for that field's typed text should win
+  // instead of being shadowed by the app-level one.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      e.preventDefault()
+      undo()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -297,19 +315,31 @@ export default function App() {
             lengths for a Tentsile-style tree tent.
           </p>
         </div>
-        <TopMenu
-          locations={locations}
-          currentLocationId={currentLocationId}
-          onSelectLocation={setCurrentLocationId}
-          onAddLocation={addLocation}
-          onRemoveLocation={removeLocation}
-          onRenameLocation={renameLocation}
-          onExport={handleExport}
-          onImportFile={handleImportFile}
-          importError={importError}
-          settings={settings}
-          onSettingsChange={setSettings}
-        />
+        <div className="app-header-actions">
+          <button
+            type="button"
+            className="undo-button"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label="Undo last change"
+            title="Undo the last tree move or edit (Ctrl/Cmd+Z)"
+          >
+            ↺ Undo
+          </button>
+          <TopMenu
+            locations={locations}
+            currentLocationId={currentLocationId}
+            onSelectLocation={setCurrentLocationId}
+            onAddLocation={addLocation}
+            onRemoveLocation={removeLocation}
+            onRenameLocation={renameLocation}
+            onExport={handleExport}
+            onImportFile={handleImportFile}
+            importError={importError}
+            settings={settings}
+            onSettingsChange={setSettings}
+          />
+        </div>
       </header>
       <UsageGuide />
       <main>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createLocation, isValidLocation, isValidReferences } from './constants'
 import type { Location, TreeEntry, TreeReferences } from './types'
 
@@ -6,6 +6,11 @@ const LOCATIONS_KEY = 'tentsile.locations'
 const CURRENT_ID_KEY = 'tentsile.currentLocationId'
 const LEGACY_TREES_KEY = 'tentsile.trees'
 const LEGACY_REFERENCES_KEY = 'tentsile.references'
+
+// Session-only undo: how many past snapshots of the current location to keep
+// around. Not persisted — closing the tab clears it, same as e.g. the
+// floating-anchor state does, since it's an editing aid, not project data.
+const MAX_UNDO_HISTORY = 50
 
 /**
  * Folds pre-multi-location data (a single flat grove) into a "Location 1"
@@ -93,11 +98,37 @@ export function useLocations() {
 
   const currentLocation = locations.find((l) => l.id === currentLocationId) ?? locations[0]
 
+  // Undo stack for the current location only — a plain mutable array (not
+  // state), since every push/pop below happens right next to a setLocations
+  // call that already triggers the re-render `canUndo` needs. The lone
+  // exception is the location-switch reset, which has no setLocations call
+  // of its own, so it bumps this throwaway counter to force one. Switching
+  // location clears the stack: undoing across two different groves' edits
+  // would be confusing, and location-management actions (rename/add/
+  // remove/import) intentionally don't go through updateCurrentLocation, so
+  // they're already out of scope for undo.
+  const pastRef = useRef<Location[]>([])
+  const [, forceUndoRerender] = useState(0)
+
+  useEffect(() => {
+    pastRef.current = []
+    forceUndoRerender((t) => t + 1)
+  }, [currentLocationId])
+
   const updateCurrentLocation = (
     patch: Partial<Pick<Location, 'trees' | 'references' | 'mirrored' | 'flippedVertically'>>,
   ) => {
+    pastRef.current = [...pastRef.current.slice(-MAX_UNDO_HISTORY + 1), currentLocation]
     setLocations((prev) => prev.map((l) => (l.id === currentLocation.id ? { ...l, ...patch } : l)))
   }
+
+  const undo = () => {
+    const previous = pastRef.current[pastRef.current.length - 1]
+    if (!previous) return
+    pastRef.current = pastRef.current.slice(0, -1)
+    setLocations((prev) => prev.map((l) => (l.id === previous.id ? previous : l)))
+  }
+  const canUndo = pastRef.current.length > 0
 
   const addLocation = () => {
     const next = createLocation(`Location ${locations.length + 1}`)
@@ -139,6 +170,8 @@ export function useLocations() {
     currentLocationId,
     setCurrentLocationId,
     updateCurrentLocation,
+    undo,
+    canUndo,
     addLocation,
     removeLocation,
     renameLocation,

@@ -13,6 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-02',
     items: [
+      'New Undo button (also Ctrl/Cmd+Z) to step back the last tree move or edit — distances, labels, diameters, and flips included.',
       'Trees on the layout diagram are now locked by default, so panning and zooming around can’t accidentally drag one out of place. Tap the lock icon above the diagram to unlock them for editing (moving or adding trees), then lock them again when you’re done.',
     ],
   },

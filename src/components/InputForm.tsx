@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Point, Settings, TreeEntry, TreeReferences } from '../types'
 import { distance, formatTreeDisplay, MAX_TREES, MIN_TREES, PERFORMANCE_WARNING_TREES, positionFromDistances } from '../geometry'
 import {
@@ -8,7 +9,14 @@ import {
   lengthUnitLabel,
   metersToDisplayLength,
 } from '../units'
+import { useDebounce } from '../useDebounce'
 import { NumberInput } from './NumberInput'
+
+// How long to wait after the last keystroke before committing an edit —
+// short enough that it still feels instant on blur/Enter (which flush
+// immediately), long enough that a normal typing burst lands as one commit
+// instead of one per keystroke (each commit is also one undo step).
+const EDIT_DEBOUNCE_MS = 400
 
 interface Props {
   trees: TreeEntry[]
@@ -69,6 +77,207 @@ function invalidTriangleMessage(
   return `${display}: ${d0} and ${d1} ${unitLabel} don't form a valid triangle with the ${refALabel}-${refBLabel} baseline (${baseline} ${unitLabel}) — left out of the layout until fixed.`
 }
 
+function diameterDisplay(diameter: number | null, unit: Settings['unitSystem']): string {
+  return diameter === null ? '' : String(Math.round(cmToDisplayDiameter(diameter * 100, unit)))
+}
+
+interface TreeRowProps {
+  tree: TreeEntry
+  index: number
+  isRefA: boolean
+  isRefB: boolean
+  refAPos: Point
+  refBPos: Point
+  refAIndex: number
+  refBIndex: number
+  refALabel: string
+  refBLabel: string
+  unit: Settings['unitSystem']
+  isDragging: boolean
+  canRemove: boolean
+  onUpdateTree: (index: number, patch: Partial<TreeEntry>) => void
+  onRemoveTree: (index: number) => void
+  onFocusEdit: (edit: { a: number; b: number } | null) => void
+  onTreeValidityChange: (index: number, message: string | null) => void
+}
+
+/**
+ * One editable row. Pulled out of InputForm's table map (rather than inlined
+ * there) so each field can hold its own local "what's displayed right now"
+ * text state — needed for the debounced fields below: the input must keep
+ * showing every keystroke immediately even while the actual commit upstream
+ * (which recomputes the whole grove) is still waiting out the debounce.
+ */
+function TreeRow({
+  tree,
+  index,
+  isRefA,
+  isRefB,
+  refAPos,
+  refBPos,
+  refAIndex,
+  refBIndex,
+  refALabel,
+  refBLabel,
+  unit,
+  isDragging,
+  canRemove,
+  onUpdateTree,
+  onRemoveTree,
+  onFocusEdit,
+  onTreeValidityChange,
+}: TreeRowProps) {
+  const distToA = distance(tree, refAPos)
+  const distToB = distance(tree, refBPos)
+  const flipSide = isFlippedSide(refAPos, refBPos, tree)
+  const unitLabel = lengthUnitLabel(unit)
+  // Rounded to 2 decimals (~3 mm in imperial) so a metric value that converts to an
+  // irrational feet figure doesn't fill the field with float noise — the underlying
+  // stored value stays exact; only what's displayed back in the box is rounded.
+  const toDisplayLen = (meters: number) => Math.round(metersToDisplayLength(meters, unit) * 100) / 100
+  const fromDisplayLen = (value: number) => displayLengthToMeters(value, unit)
+
+  const rejectEdit = (d0: number, d1: number) => {
+    onTreeValidityChange(
+      index,
+      invalidTriangleMessage(
+        formatTreeDisplay(index + 1, tree.label),
+        toDisplayLen(d0),
+        toDisplayLen(d1),
+        toDisplayLen(distance(refAPos, refBPos)),
+        unitLabel,
+        refALabel,
+        refBLabel,
+      ),
+    )
+  }
+  const applyEdit = (pos: Point) => {
+    onUpdateTree(index, { x: pos.x, y: pos.y })
+    onTreeValidityChange(index, null)
+  }
+
+  const [labelText, setLabelText] = useState(tree.label)
+  useEffect(() => setLabelText(tree.label), [tree.label])
+  const labelDebounce = useDebounce(EDIT_DEBOUNCE_MS)
+
+  const [diameterText, setDiameterText] = useState(() => diameterDisplay(tree.diameter, unit))
+  useEffect(() => setDiameterText(diameterDisplay(tree.diameter, unit)), [tree.diameter, unit])
+  const diameterDebounce = useDebounce(EDIT_DEBOUNCE_MS)
+  const commitDiameter = (raw: string) => {
+    const displayValue = numberOrNull(raw)
+    onUpdateTree(index, { diameter: displayValue === null ? null : displayDiameterToCm(displayValue, unit) / 100 })
+  }
+
+  const distADebounce = useDebounce(EDIT_DEBOUNCE_MS)
+  const distBDebounce = useDebounce(EDIT_DEBOUNCE_MS)
+
+  return (
+    <tr className={isDragging ? 'tree-row-dragging' : undefined}>
+      <td className="cell-number">{index + 1}</td>
+      <td>
+        <input
+          className="tree-label-input"
+          type="text"
+          placeholder="optional"
+          value={labelText}
+          onChange={(e) => {
+            const next = e.target.value
+            setLabelText(next)
+            labelDebounce.schedule(() => onUpdateTree(index, { label: next }))
+          }}
+          onBlur={labelDebounce.flush}
+        />
+      </td>
+      <td>
+        {isRefA ? (
+          <span className="cell-dash">—</span>
+        ) : (
+          <NumberInput
+            min={0}
+            step={0.1}
+            value={toDisplayLen(distToA)}
+            onChange={(n) =>
+              distADebounce.schedule(() => {
+                const newDist = fromDisplayLen(n)
+                const pos = isRefB
+                  ? withDistanceFromAnchor(refAPos, tree, newDist)
+                  : positionFromDistances(refAPos, refBPos, newDist, distToB, flipSide)
+                if (pos) applyEdit(pos)
+                else rejectEdit(newDist, distToB)
+              })
+            }
+            onFocus={() => onFocusEdit({ a: refAIndex, b: index })}
+            onBlur={() => {
+              distADebounce.flush()
+              onFocusEdit(null)
+            }}
+          />
+        )}
+      </td>
+      <td>
+        {isRefA || isRefB ? (
+          <span className="cell-dash">—</span>
+        ) : (
+          <NumberInput
+            min={0}
+            step={0.1}
+            value={toDisplayLen(distToB)}
+            onChange={(n) =>
+              distBDebounce.schedule(() => {
+                const newDist = fromDisplayLen(n)
+                const pos = positionFromDistances(refAPos, refBPos, distToA, newDist, flipSide)
+                if (pos) applyEdit(pos)
+                else rejectEdit(distToA, newDist)
+              })
+            }
+            onFocus={() => onFocusEdit({ a: refBIndex, b: index })}
+            onBlur={() => {
+              distBDebounce.flush()
+              onFocusEdit(null)
+            }}
+          />
+        )}
+      </td>
+      <td>
+        {isRefA || isRefB ? (
+          <span className="cell-dash">—</span>
+        ) : (
+          <input
+            type="checkbox"
+            checked={flipSide}
+            onChange={(e) => {
+              const pos = positionFromDistances(refAPos, refBPos, distToA, distToB, e.target.checked)
+              if (pos) applyEdit(pos)
+            }}
+          />
+        )}
+      </td>
+      <td>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          placeholder={String(Math.round(cmToDisplayDiameter(40, unit)))}
+          value={diameterText}
+          onChange={(e) => {
+            const next = e.target.value
+            setDiameterText(next)
+            diameterDebounce.schedule(() => commitDiameter(next))
+          }}
+          onBlur={diameterDebounce.flush}
+        />
+      </td>
+      <td>
+        {!isRefA && !isRefB && canRemove && (
+          <button type="button" className="icon-button" onClick={() => onRemoveTree(index)} aria-label={`Remove tree ${index + 1}`}>
+            ×
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 export function InputForm({
   trees,
   onTreesChange,
@@ -94,16 +303,6 @@ export function InputForm({
   }
 
   const unit = settings.unitSystem
-  // Rounded to 2 decimals (~3 mm in imperial) so a metric value that converts to an
-  // irrational feet figure doesn't fill the field with float noise — the underlying
-  // stored value stays exact; only what's displayed back in the box is rounded.
-  const toDisplayLen = (meters: number) => Math.round(metersToDisplayLength(meters, unit) * 100) / 100
-  const fromDisplayLen = (value: number) => displayLengthToMeters(value, unit)
-
-  const setDiameter = (index: number, raw: string) => {
-    const displayValue = numberOrNull(raw)
-    updateTree(index, { diameter: displayValue === null ? null : displayDiameterToCm(displayValue, unit) / 100 })
-  }
 
   const refALabel = formatTreeDisplay(references.a + 1, trees[references.a]?.label ?? '')
   const refBLabel = formatTreeDisplay(references.b + 1, trees[references.b]?.label ?? '')
@@ -157,122 +356,28 @@ export function InputForm({
             </tr>
           </thead>
           <tbody>
-            {trees.map((tree, index) => {
-              const isRefA = index === references.a
-              const isRefB = index === references.b
-              const distToA = distance(tree, refAPos)
-              const distToB = distance(tree, refBPos)
-              const flipSide = isFlippedSide(refAPos, refBPos, tree)
-              const unitLabel = lengthUnitLabel(unit)
-              const rejectEdit = (d0: number, d1: number) => {
-                onTreeValidityChange(
-                  index,
-                  invalidTriangleMessage(
-                    formatTreeDisplay(index + 1, tree.label),
-                    toDisplayLen(d0),
-                    toDisplayLen(d1),
-                    toDisplayLen(distance(refAPos, refBPos)),
-                    unitLabel,
-                    refALabel,
-                    refBLabel,
-                  ),
-                )
-              }
-              const applyEdit = (pos: Point) => {
-                updateTree(index, { x: pos.x, y: pos.y })
-                onTreeValidityChange(index, null)
-              }
-              return (
-                <tr key={index} className={index === draggingTreeIndex ? 'tree-row-dragging' : undefined}>
-                  <td className="cell-number">{index + 1}</td>
-                  <td>
-                    <input
-                      className="tree-label-input"
-                      type="text"
-                      placeholder="optional"
-                      value={tree.label}
-                      onChange={(e) => updateTree(index, { label: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    {isRefA ? (
-                      <span className="cell-dash">—</span>
-                    ) : (
-                      <NumberInput
-                        min={0}
-                        step={0.1}
-                        value={toDisplayLen(distToA)}
-                        onChange={(n) => {
-                          const newDist = fromDisplayLen(n)
-                          const pos = isRefB
-                            ? withDistanceFromAnchor(refAPos, tree, newDist)
-                            : positionFromDistances(refAPos, refBPos, newDist, distToB, flipSide)
-                          if (pos) applyEdit(pos)
-                          else rejectEdit(newDist, distToB)
-                        }}
-                        onFocus={() => onFocusEdit({ a: references.a, b: index })}
-                        onBlur={() => onFocusEdit(null)}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    {isRefA || isRefB ? (
-                      <span className="cell-dash">—</span>
-                    ) : (
-                      <NumberInput
-                        min={0}
-                        step={0.1}
-                        value={toDisplayLen(distToB)}
-                        onChange={(n) => {
-                          const newDist = fromDisplayLen(n)
-                          const pos = positionFromDistances(refAPos, refBPos, distToA, newDist, flipSide)
-                          if (pos) applyEdit(pos)
-                          else rejectEdit(distToA, newDist)
-                        }}
-                        onFocus={() => onFocusEdit({ a: references.b, b: index })}
-                        onBlur={() => onFocusEdit(null)}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    {isRefA || isRefB ? (
-                      <span className="cell-dash">—</span>
-                    ) : (
-                      <input
-                        type="checkbox"
-                        checked={flipSide}
-                        onChange={(e) => {
-                          const pos = positionFromDistances(refAPos, refBPos, distToA, distToB, e.target.checked)
-                          if (pos) applyEdit(pos)
-                        }}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder={String(Math.round(cmToDisplayDiameter(40, unit)))}
-                      value={tree.diameter === null ? '' : Math.round(cmToDisplayDiameter(tree.diameter * 100, unit))}
-                      onChange={(e) => setDiameter(index, e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    {!isRefA && !isRefB && trees.length > MIN_TREES && (
-                      <button
-                        type="button"
-                        className="icon-button"
-                        onClick={() => onRemoveTree(index)}
-                        aria-label={`Remove tree ${index + 1}`}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
+            {trees.map((tree, index) => (
+              <TreeRow
+                key={index}
+                tree={tree}
+                index={index}
+                isRefA={index === references.a}
+                isRefB={index === references.b}
+                refAPos={refAPos}
+                refBPos={refBPos}
+                refAIndex={references.a}
+                refBIndex={references.b}
+                refALabel={refALabel}
+                refBLabel={refBLabel}
+                unit={unit}
+                isDragging={index === draggingTreeIndex}
+                canRemove={trees.length > MIN_TREES}
+                onUpdateTree={updateTree}
+                onRemoveTree={onRemoveTree}
+                onFocusEdit={onFocusEdit}
+                onTreeValidityChange={onTreeValidityChange}
+              />
+            ))}
           </tbody>
         </table>
       </div>

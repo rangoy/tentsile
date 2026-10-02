@@ -93,6 +93,9 @@ interface TreeRowProps {
   refALabel: string
   refBLabel: string
   unit: Settings['unitSystem']
+  /** explicit tab stops for the distance fields — see InputForm's own comment on why; undefined for a row with no such field (e.g. Ref A has none) */
+  distATabIndex?: number
+  distBTabIndex?: number
   isDragging: boolean
   canRemove: boolean
   onUpdateTree: (index: number, patch: Partial<TreeEntry>) => void
@@ -120,6 +123,8 @@ function TreeRow({
   refALabel,
   refBLabel,
   unit,
+  distATabIndex,
+  distBTabIndex,
   isDragging,
   canRemove,
   onUpdateTree,
@@ -195,6 +200,7 @@ function TreeRow({
           <NumberInput
             min={0}
             step={0.1}
+            tabIndex={distATabIndex}
             value={toDisplayLen(distToA)}
             onChange={(n) =>
               distADebounce.schedule(() => {
@@ -221,6 +227,7 @@ function TreeRow({
           <NumberInput
             min={0}
             step={0.1}
+            tabIndex={distBTabIndex}
             value={toDisplayLen(distToB)}
             onChange={(n) =>
               distBDebounce.schedule(() => {
@@ -307,6 +314,29 @@ export function InputForm({
   const refALabel = formatTreeDisplay(references.a + 1, trees[references.a]?.label ?? '')
   const refBLabel = formatTreeDisplay(references.b + 1, trees[references.b]?.label ?? '')
 
+  // Explicit tab stops, so Tab — and, more importantly, a mobile keyboard's
+  // own "next" control, which follows this same browser focus order rather
+  // than any keypress we could intercept — steps straight down "→ Ref A" for
+  // every tree, then down "→ Ref B", matching how you actually measure in
+  // the field: walk the whole grove once from each reference tree, instead
+  // of zigzagging between the two per tree. Picking the references comes
+  // right before, since that's the natural first step. Everything else
+  // (label, diameter, flip, remove) keeps the browser's default order, which
+  // picks up right after this explicit range ends.
+  let nextTabIndex = 1
+  const refATabIndex = nextTabIndex++
+  const refBTabIndex = nextTabIndex++
+  const distATabIndex = new Map<number, number>()
+  trees.forEach((_, i) => {
+    if (i === references.a) return
+    distATabIndex.set(i, nextTabIndex++)
+  })
+  const distBTabIndex = new Map<number, number>()
+  trees.forEach((_, i) => {
+    if (i === references.a || i === references.b) return
+    distBTabIndex.set(i, nextTabIndex++)
+  })
+
   return (
     <div className="panel">
       <h2>Trees</h2>
@@ -318,7 +348,7 @@ export function InputForm({
       <div className="field-grid reference-picker">
         <label>
           Reference A
-          <select value={references.a} onChange={(e) => onReferenceChange('a', Number(e.target.value))}>
+          <select value={references.a} tabIndex={refATabIndex} onChange={(e) => onReferenceChange('a', Number(e.target.value))}>
             {trees.map((tree, i) =>
               i === references.b ? null : (
                 <option key={i} value={i}>
@@ -330,7 +360,7 @@ export function InputForm({
         </label>
         <label>
           Reference B
-          <select value={references.b} onChange={(e) => onReferenceChange('b', Number(e.target.value))}>
+          <select value={references.b} tabIndex={refBTabIndex} onChange={(e) => onReferenceChange('b', Number(e.target.value))}>
             {trees.map((tree, i) =>
               i === references.a ? null : (
                 <option key={i} value={i}>
@@ -370,6 +400,8 @@ export function InputForm({
                 refALabel={refALabel}
                 refBLabel={refBLabel}
                 unit={unit}
+                distATabIndex={distATabIndex.get(index)}
+                distBTabIndex={distBTabIndex.get(index)}
                 isDragging={index === draggingTreeIndex}
                 canRemove={trees.length > MIN_TREES}
                 onUpdateTree={updateTree}

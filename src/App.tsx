@@ -59,6 +59,11 @@ export default function App() {
   const [focusedEdit, setFocusedEdit] = useState<{ a: number; b: number } | null>(null)
   /** grove index of the tree currently being dragged on the canvas, or null — lets the input table highlight the matching row, see Visualization's onDraggingChange */
   const [draggingTreeIndex, setDraggingTreeIndex] = useState<number | null>(null)
+  // Off by default so panning/zooming around the diagram can't accidentally
+  // move a tree — the user has to deliberately switch into edit mode first.
+  // Deliberately transient (not persisted to the location), since it's a
+  // per-session safeguard rather than project data.
+  const [editTreesEnabled, setEditTreesEnabled] = useState(false)
   // A tree with a currently-rejected (geometrically impossible) distance edit
   // keeps its last valid position (see InputForm.tsx) but is excluded from
   // combos/visualization entirely until fixed — keyed by index, value is the
@@ -329,6 +334,8 @@ export default function App() {
               onTreeMove={handleTreeMove}
               onAddTreeAt={handleAddTreeAt}
               onDraggingChange={setDraggingTreeIndex}
+              editTreesEnabled={editTreesEnabled}
+              onToggleEditTrees={() => setEditTreesEnabled((v) => !v)}
             />
           )}
         </div>

@@ -735,9 +735,14 @@ main {
   opacity: 0.85;
 }
 
-.viz-controls button:hover {
+.viz-controls button:hover:not(:disabled) {
   opacity: 1;
   border-color: var(--accent);
+}
+
+.viz-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .viz-mirror-active {

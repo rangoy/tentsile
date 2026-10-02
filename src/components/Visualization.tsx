@@ -41,6 +41,9 @@ interface Props {
   onAddTreeAt: (pos: Point) => void
   /** reports the grove index of the tree currently being dragged, or null once released — lets the input table highlight the matching row */
   onDraggingChange?: (index: number | null) => void
+  /** gates all tree editing (drag, tap-to-add, the + Tree button) so panning/zooming around the diagram can't accidentally move or create a tree */
+  editTreesEnabled: boolean
+  onToggleEditTrees: () => void
 }
 
 const WIDTH = 640
@@ -92,6 +95,8 @@ export function Visualization({
   onTreeMove,
   onAddTreeAt,
   onDraggingChange,
+  editTreesEnabled,
+  onToggleEditTrees,
 }: Props) {
   const { triangle } = fit
   const svgRef = useRef<SVGSVGElement>(null)
@@ -176,6 +181,15 @@ export function Visualization({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging])
 
+  // Safety net for the rare case edit mode is switched off mid-drag (e.g. a
+  // keyboard toggle) — without this the drag would otherwise keep going since
+  // startTreeDrag's own guard only runs at pointerdown.
+  useEffect(() => {
+    if (!editTreesEnabled && dragIndexRef.current !== null) stopDrag()
+    setHoveredTreeIndex(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editTreesEnabled])
+
   if (!triangle.valid) {
     return (
       <div className="panel">
@@ -237,6 +251,7 @@ export function Visualization({
     isDragging && dragIndexRef.current === index && liveDragPos ? liveDragPos : fallback
 
   const startTreeDrag = (index: number) => (e: React.PointerEvent) => {
+    if (!editTreesEnabled) return
     e.stopPropagation()
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -275,6 +290,7 @@ export function Visualization({
   const handleCanvasPointerUp = (e: React.PointerEvent<SVGRectElement>) => {
     const start = clickStartRef.current
     clickStartRef.current = null
+    if (!editTreesEnabled) return
     if (!start || start.pointerId !== e.pointerId) return
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_MOVE_THRESHOLD_PX) return
     const content = toContentPoint(e.clientX, e.clientY)
@@ -366,7 +382,11 @@ export function Visualization({
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           className="viz-svg"
           role="img"
-          aria-label="Tree and tent layout — scroll or pinch to zoom, drag to pan, drag a tree to reposition it, tap empty space to add one"
+          aria-label={
+            editTreesEnabled
+              ? 'Tree and tent layout — scroll or pinch to zoom, drag to pan, drag a tree to reposition it, tap empty space to add one'
+              : 'Tree and tent layout — scroll or pinch to zoom, drag to pan. Turn on Edit trees to move or add trees.'
+          }
           {...handlers}
         >
           <g transform={transform} ref={contentGroupRef}>
@@ -637,12 +657,12 @@ export function Visualization({
               cy={p.y}
               r={radiusPx + 12}
               fill="transparent"
-              cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+              cursor={!editTreesEnabled ? 'default' : isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
               onPointerDown={startTreeDrag(tree.index)}
               onPointerMove={moveTreeDrag}
               onPointerUp={endTreeDrag}
               onPointerCancel={endTreeDrag}
-              onPointerEnter={() => setHoveredTreeIndex(tree.index)}
+              onPointerEnter={() => editTreesEnabled && setHoveredTreeIndex(tree.index)}
               onPointerLeave={() => setHoveredTreeIndex((prev) => (prev === tree.index ? null : prev))}
             />
           )
@@ -692,12 +712,12 @@ export function Visualization({
                 cy={p.y}
                 r={MIN_TREE_RADIUS_PX + 12}
                 fill="transparent"
-                cursor={isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
+                cursor={!editTreesEnabled ? 'default' : isDragging && dragIndexRef.current === tree.index ? 'grabbing' : 'grab'}
                 onPointerDown={startTreeDrag(tree.index)}
                 onPointerMove={moveTreeDrag}
                 onPointerUp={endTreeDrag}
                 onPointerCancel={endTreeDrag}
-                onPointerEnter={() => setHoveredTreeIndex(tree.index)}
+                onPointerEnter={() => editTreesEnabled && setHoveredTreeIndex(tree.index)}
                 onPointerLeave={() => setHoveredTreeIndex((prev) => (prev === tree.index ? null : prev))}
               />
             </g>
@@ -727,6 +747,7 @@ export function Visualization({
             underneath each stroke keeps it legible over any dot color. */}
         {hoveredTreeIndex !== null &&
           !isDragging &&
+          editTreesEnabled &&
           (() => {
             const pos = indexToPoint(hoveredTreeIndex)
             if (!pos) return null
@@ -781,10 +802,28 @@ export function Visualization({
         <div className="viz-controls">
           <button
             type="button"
+            onClick={onToggleEditTrees}
+            aria-label={editTreesEnabled ? 'Editing trees — click to lock positions' : 'Tree positions locked — click to edit trees'}
+            aria-pressed={editTreesEnabled}
+            title={
+              editTreesEnabled
+                ? 'Editing trees — click to lock positions and prevent accidental drags'
+                : 'Tree positions locked — click to add or move trees'
+            }
+            className={editTreesEnabled ? 'viz-mirror-button viz-mirror-active' : 'viz-mirror-button'}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              {editTreesEnabled ? <path d="M7 11V7a5 5 0 0 1 9.9-1" /> : <path d="M7 11V7a5 5 0 0 1 10 0v4" />}
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={() => onAddTreeAt({ x: cx, y: cy })}
             aria-label="Add a tree at the center of the view"
-            title="Add a tree at the center of the view — drag it into place after"
+            title={editTreesEnabled ? 'Add a tree at the center of the view — drag it into place after' : 'Turn on Edit trees to add a tree'}
             className="viz-reset-button"
+            disabled={!editTreesEnabled}
           >
             + Tree
           </button>

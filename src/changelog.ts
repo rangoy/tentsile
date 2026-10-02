@@ -11,6 +11,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-02',
+    items: [
+      'Trees on the layout diagram are now locked by default, so panning and zooming around can’t accidentally drag one out of place. Tap the lock icon above the diagram to unlock them for editing (moving or adding trees), then lock them again when you’re done.',
+    ],
+  },
+  {
     date: '2026-09-09',
     items: [
       'Importing a backup now merges into what’s already saved instead of replacing it: a location with a matching ID gets updated, a new ID gets added, and anything else already saved is left alone.',
